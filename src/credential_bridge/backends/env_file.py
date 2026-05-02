@@ -30,9 +30,9 @@ class EnvFileBackend(BaseSecretBackend):
         return self.path.read_text(encoding=self.encoding).splitlines(keepends=True)
 
     def _write_lines(self, lines: List[str]) -> None:
-        tmp = self.path.with_suffix(".tmp")
+        tmp = self.path.parent / (self.path.name + ".tmp")
         tmp.write_text("".join(lines), encoding=self.encoding)
-        os.replace(tmp, self.path)
+        os.replace(str(tmp), str(self.path))
 
     def _current_keys(self) -> Dict[str, str]:
         return dict(dotenv_values(self.path)) if self.path.exists() else {}
@@ -68,7 +68,7 @@ class EnvFileBackend(BaseSecretBackend):
         found = {k for k in secret if k in existing}
         if not found:
             raise EnvFileError(
-                f"None of the specified keys {list(secret)} not found in {self.path}. "
+                f"None of the specified keys {list(secret)} exist in {self.path}. "
                 "Use add_secret() first."
             )
         lines = self._read_lines()
@@ -91,30 +91,10 @@ class EnvFileBackend(BaseSecretBackend):
         if name not in existing:
             raise EnvFileNotFoundError(f"Key '{name}' not found in {self.path}.")
         lines = self._read_lines()
-        new_lines = []
-        skip_next_comment = False
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            # Check if this comment precedes only the key we're deleting
-            if stripped.startswith("#") and not skip_next_comment:
-                # Look ahead: find next non-empty line
-                remaining = [l for l in lines[i + 1:] if l.strip()]
-                if remaining:
-                    next_key = remaining[0].split("=", 1)[0].strip() if "=" in remaining[0] else None
-                    if next_key == name:
-                        # Check if there's another key after the deleted one under same comment
-                        after = [l for l in lines[i + 1:] if l.strip() and not l.strip().startswith("#")]
-                        if len(after) == 1:
-                            skip_next_comment = True
-                            continue
-            if skip_next_comment and stripped == "":
-                continue
-            if "=" in line and not stripped.startswith("#"):
-                key = line.split("=", 1)[0].strip()
-                if key == name:
-                    skip_next_comment = False
-                    continue
-            new_lines.append(line)
+        new_lines = [
+            line for line in lines
+            if not ("=" in line and not line.strip().startswith("#") and line.split("=", 1)[0].strip() == name)
+        ]
         self._write_lines(new_lines)
         if self.load_into_environ:
             os.environ.pop(name, None)

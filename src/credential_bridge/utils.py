@@ -74,17 +74,3 @@ def get_session(
     return session
 
 
-class VaultManagerError(Exception):
-    """Custom exception for VaultManager errors."""
-
-    def __init__(self, message: str = "An error occurred in VaultManager."):
-        self.message = message
-        super().__init__(self.message)
-
-
-class KeyringManagerError(Exception):
-    """Custom exception for KeyringManager errors."""
-
-    def __init__(self, message: str = "An error occurred in KeyringManager."):
-        self.message = message
-        super().__init__(self.message)

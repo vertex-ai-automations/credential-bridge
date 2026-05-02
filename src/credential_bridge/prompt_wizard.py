@@ -316,8 +316,8 @@ def configure_env():
 
 
 def run_keyring_cli(action, service_name, name, secret):
-    from .backends.keyring import KeyringBackend
-    manager = KeyringBackend(service_name=service_name)
+    from .manager import SecretsManager
+    manager = SecretsManager("keyring", service_name=service_name)
     try:
         if action == "add":
             manager.add_secret(name, {name: secret})
@@ -336,39 +336,37 @@ def run_keyring_cli(action, service_name, name, secret):
 
 
 def run_vault_cli(action, service_name, secret_data, versions=None):
-    from .backends.vault import VaultBackend
-    manager = VaultBackend(service_name=service_name)
+    from .manager import SecretsManager
+    manager = SecretsManager("vault", service_name=service_name)
     try:
         if action == "add":
             manager.add_secret(service_name, secret_data)
-            print(f"👍 Added: {service_name}")
         elif action == "get":
             result = manager.get_secret(service_name)
             print(f"👍 {service_name}: {result}")
         elif action == "update":
             manager.update_secret(service_name, secret_data)
-            print(f"👍 Updated: {service_name}")
         elif action == "delete":
             manager.delete_secret(service_name)
-            print(f"👍 Deleted: {service_name}")
         elif action == "list":
             keys = manager.list_secrets(service_name)
             print(f"👍 Keys: {keys}")
-        elif action == "read-metadata":
-            meta = manager.read_secret_metadata(service_name)
-            print(f"👍 Metadata: {meta}")
-        elif action == "delete-versions":
-            manager.delete_secret_versions(service_name, versions)
-            print(f"👍 Deleted versions {versions}")
-        elif action == "undelete-versions":
-            manager.undelete_secret_versions(service_name, versions)
-            print(f"👍 Undeleted versions {versions}")
-        elif action == "destroy-versions":
-            manager.destroy_secret_versions(service_name, versions)
-            print(f"👍 Destroyed versions {versions}")
-        elif action == "get-config":
-            cfg = manager.get_config()
-            print(f"👍 Config: {cfg}")
+        elif action in ("read-metadata", "delete-versions", "undelete-versions", "destroy-versions", "get-config"):
+            # These are Vault-specific — access underlying backend directly
+            vault_backend = manager.backend
+            if action == "read-metadata":
+                meta = vault_backend.read_secret_metadata(service_name)
+                print(f"👍 Metadata: {meta}")
+            elif action == "delete-versions":
+                vault_backend.delete_secret_versions(service_name, versions)
+            elif action == "undelete-versions":
+                vault_backend.undelete_secret_versions(service_name, versions)
+            elif action == "destroy-versions":
+                vault_backend.destroy_secret_versions(service_name, versions)
+            elif action == "get-config":
+                cfg = vault_backend.get_config()
+                print(f"👍 Config: {cfg}")
+        print(f"👍 {action} completed.")
     except Exception as e:
         print(f"❌ Error: {e}")
 

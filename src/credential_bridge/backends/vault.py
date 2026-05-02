@@ -5,6 +5,7 @@ import os
 from typing import Any, Dict, List, Optional, Union
 
 import hvac
+import requests
 import urllib3
 
 from credential_bridge.backends.base import BaseSecretBackend
@@ -159,6 +160,8 @@ class VaultBackend(BaseSecretBackend):
             raise VaultAuthError(f"Forbidden: {exc}") from exc
         except hvac.exceptions.InvalidRequest as exc:
             raise VaultAuthError(f"Invalid request: {exc}") from exc
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot connect to Vault at {self.vault_addr}: {exc}") from exc
         except (ConnectionError, OSError) as exc:
             raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:

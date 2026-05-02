@@ -31,7 +31,7 @@ def test_explicit_vault_url_used(mocker, mock_hvac):
 
 
 def test_reads_vault_addr_from_env(mocker, mock_hvac):
-    mocker.patch("credential_bridge.backends.vault.os.environ.get", return_value="https://env.vault.com")
+    mocker.patch.dict("os.environ", {"VAULT_ADDR": "https://env.vault.com"})
     backend = VaultBackend(vault_token="s.test")
     assert backend.vault_addr == "https://env.vault.com"
 
