@@ -37,7 +37,6 @@ repository = 'https://github.com/vertex-ai-automations/credential-bridge'
 issues = "https://github.com/vertex-ai-automations/credential-bridge/issues/new"
 
 [project.scripts]
-[project.scripts]
 keyring-cli = "credential_bridge.cli.keyring_cli:main"
 vault-cli = "credential_bridge.cli.vault_cli:main"
 run-wizard = "credential_bridge.prompt_wizard:main"
