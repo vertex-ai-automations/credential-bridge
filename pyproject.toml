@@ -53,3 +53,8 @@ dependencies = {file = ["requirements.txt"]}
 # Auto generate _version.py with the corresponding git tag
 version_file = "src/credential_bridge/_version.py"
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests (may require external services)",
+]
+
