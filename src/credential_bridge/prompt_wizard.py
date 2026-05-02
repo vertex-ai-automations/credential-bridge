@@ -7,11 +7,7 @@ from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.styles import Style
 
-from .cli.keyring_cli import handle_commands as keyring_handle
-from .cli.vault_cli import handle_commands as vault_handle
-from .keyring_manager import KeyringManager
-from .utils import get_session, get_vault_credentials, load_welcome_banner, load_config, save_config
-from .vault_manager import VaultManager
+from .utils import get_vault_credentials, load_welcome_banner, load_config, save_config
 
 welcome_banner = load_welcome_banner("welcome_banner.txt")
 
@@ -21,40 +17,40 @@ option_style = Style.from_dict({"prompt": "fg:ansibrightcyan bold"})
 entry_style = Style.from_dict({"prompt": "fg:ansibrightgreen bold"})
 
 
-def is_vault_cred_valid(vault_addr=None, vault_token=None, role_id=None, secret_id=None):
-    """Check if the provided vault token is valid."""
+def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
+    import os
+    vault_addr = os.environ.get("VAULT_ADDR", "")
     if not vault_addr:
-        print("❌ Vault address is required.")
+        print("❌ VAULT_ADDR environment variable not set.")
         return False
     if vault_token:
         try:
-            client = hvac.Client(url=vault_addr, token=vault_token, session=get_session(), verify=False)
-            # Method returns true if valid
+            client = hvac.Client(url=vault_addr, token=vault_token, verify=False)
             return client.is_authenticated()
         except Exception as e:
-            print(f"❌ Error validing vault token: {e}")
+            print(f"❌ Error validating vault token: {e}")
             return False
     elif role_id and secret_id:
         try:
-            client = hvac.Client(url=vault_addr, session=get_session(), verify=False)
+            client = hvac.Client(url=vault_addr, verify=False)
             client.auth.approle.login(role_id=role_id, secret_id=secret_id)
-            # Method returns true if valid
             return client.is_authenticated()
         except Exception as e:
             print(f"❌ Error validating approle creds: {e}")
             return False
-    else:
-        print("❌ No vault token or approle credential provided.")
-        return False
+    print("❌ No vault token or approle credential provided.")
+    return False
 
 
 def main():
     print_formatted_text(HTML(style_banner))
     while True:
-        service_completer = WordCompleter(["keyring", "vault", "exit"], ignore_case=True)
+        service_completer = WordCompleter(["keyring", "vault", "env", "exit"], ignore_case=True)
         service = (
             prompt(
-                "🧰 Choose service to configure (keyring/vault/exit): ", completer=service_completer, style=option_style
+                "🧰 Choose service (keyring/vault/env/exit): ",
+                completer=service_completer,
+                style=option_style,
             )
             .strip()
             .lower()
@@ -64,13 +60,15 @@ def main():
             configure_keyring()
         elif service == "vault":
             configure_vault()
+        elif service == "env":
+            configure_env()
         elif service == "exit":
             print(
                 "👋 Thank you for using the Credential Bridge Wizard."
             )
             sys.exit(0)
         else:
-            print("ℹ️ Invalid selection. Please choose 'keyring' or 'vault'❗")
+            print("ℹ️ Invalid selection. Please choose 'keyring', 'vault', or 'env'❗")
             continue
 
 
@@ -121,24 +119,9 @@ def configure_vault():
         # Get existing credentials
         vault_token, vault_role_id, vault_secret_id = get_vault_credentials()
 
-        # Get vault address from environment or config
-        import os
-        vault_addr = os.getenv("VAULT_ADDR")
-        if not vault_addr:
-            from .utils import load_config
-            config = load_config()
-            vault_addr = config.get("vault_addr")
-
-        if not vault_addr:
-            vault_addr = prompt("⌨️ Enter Vault Address (e.g., https://vault.example.com): ", style=entry_style).strip()
-            if vault_addr:
-                config_data = load_config() if 'config' not in locals() else config
-                config_data["vault_addr"] = vault_addr
-                save_config(config_data)
-
         if auth_type == "vault_token" and not vault_token:
             vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-            if is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
+            if is_vault_cred_valid(vault_token=vault_token):
                 config_data = load_config()
                 config_data["vault_token"] = vault_token
                 save_config(config_data)
@@ -150,7 +133,7 @@ def configure_vault():
         elif auth_type == "approle" and not (vault_role_id and vault_secret_id):
             vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
             vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-            if is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
+            if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
                 config_data = load_config()
                 config_data["vault_role_id"] = vault_role_id
                 config_data["vault_secret_id"] = vault_secret_id
@@ -161,13 +144,13 @@ def configure_vault():
                 continue
         else:
             if auth_type == "vault_token":
-                if not is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
+                if not is_vault_cred_valid(vault_token=vault_token):
                     print(
                         "📰 Existing Vault token is not valid or has expired. Please obtain a new Vault token from Vault UI:"
                     )
                     print(f"💻Vault Token: {vault_token}")
                     vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-                    if is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
+                    if is_vault_cred_valid(vault_token=vault_token):
                         config_data = load_config()
                         config_data["vault_token"] = vault_token
                         save_config(config_data)
@@ -179,7 +162,7 @@ def configure_vault():
                     print("👍Existing Vault Token is still valid continuing...")
 
             if auth_type == "approle":
-                if not is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
+                if not is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
                     print(
                         "📰 Existing Vault Approle Credentials are not valid or has expired. Please obtain a new role or secret id from Vault UI:"
                     )
@@ -187,7 +170,7 @@ def configure_vault():
                     print(f"💻 App Secret ID: {vault_secret_id}")
                     vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
                     vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-                    if is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
+                    if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
                         config_data = load_config()
                         config_data["vault_role_id"] = vault_role_id
                         config_data["vault_secret_id"] = vault_secret_id
@@ -295,14 +278,99 @@ def configure_vault():
             run_vault_cli(action, service_name, secret_data, versions)
 
 
+def configure_env():
+    from .backends.env_file import EnvFileBackend
+    while True:
+        action_completer = WordCompleter(["add", "get", "update", "delete", "list", "back"], ignore_case=True)
+        action = (
+            prompt("🧰 Choose action (add/get/update/delete/list/back): ",
+                   completer=action_completer, style=option_style)
+            .strip().lower()
+        )
+        if action == "back":
+            return
+        env_path = prompt("⌨️ Enter .env file path (default: .env): ", style=entry_style).strip() or ".env"
+        backend = EnvFileBackend(path=env_path)
+        try:
+            if action == "list":
+                keys = backend.list_secrets()
+                print(f"Keys in {env_path}: {keys}")
+            elif action in ["add", "update"]:
+                name = prompt("⌨️ Enter key name: ", style=entry_style).strip()
+                value = prompt("⌨️ Enter value: ", style=entry_style).strip()
+                if action == "add":
+                    backend.add_secret(name, {name: value})
+                else:
+                    backend.update_secret(name, {name: value})
+                print(f"👍 {action.capitalize()} successful.")
+            elif action in ["get", "delete"]:
+                name = prompt("⌨️ Enter key name: ", style=entry_style).strip()
+                if action == "get":
+                    result = backend.get_secret(name)
+                    print(f"👍 {name} = {result.get(name)}")
+                else:
+                    backend.delete_secret(name)
+                    print(f"👍 {name} deleted.")
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
 def run_keyring_cli(action, service_name, name, secret):
-    manager = KeyringManager(service_name=service_name)
-    keyring_handle(manager, action, service_name, name, secret)
+    from .backends.keyring import KeyringBackend
+    manager = KeyringBackend(service_name=service_name)
+    try:
+        if action == "add":
+            manager.add_secret(name, {name: secret})
+            print(f"👍 Added: {service_name} / {name}")
+        elif action == "get":
+            result = manager.get_secret(name)
+            print(f"👍 {name} = {result.get(name)}")
+        elif action == "update":
+            manager.update_secret(name, {name: secret})
+            print(f"👍 Updated: {service_name} / {name}")
+        elif action == "delete":
+            manager.delete_secret(name)
+            print(f"👍 Deleted: {service_name} / {name}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
 
 def run_vault_cli(action, service_name, secret_data, versions=None):
-    manager = VaultManager(service_name=service_name)
-    vault_handle(manager, action, service_name, secret_data, versions)
+    from .backends.vault import VaultBackend
+    manager = VaultBackend(service_name=service_name)
+    try:
+        if action == "add":
+            manager.add_secret(service_name, secret_data)
+            print(f"👍 Added: {service_name}")
+        elif action == "get":
+            result = manager.get_secret(service_name)
+            print(f"👍 {service_name}: {result}")
+        elif action == "update":
+            manager.update_secret(service_name, secret_data)
+            print(f"👍 Updated: {service_name}")
+        elif action == "delete":
+            manager.delete_secret(service_name)
+            print(f"👍 Deleted: {service_name}")
+        elif action == "list":
+            keys = manager.list_secrets(service_name)
+            print(f"👍 Keys: {keys}")
+        elif action == "read-metadata":
+            meta = manager.read_secret_metadata(service_name)
+            print(f"👍 Metadata: {meta}")
+        elif action == "delete-versions":
+            manager.delete_secret_versions(service_name, versions)
+            print(f"👍 Deleted versions {versions}")
+        elif action == "undelete-versions":
+            manager.undelete_secret_versions(service_name, versions)
+            print(f"👍 Undeleted versions {versions}")
+        elif action == "destroy-versions":
+            manager.destroy_secret_versions(service_name, versions)
+            print(f"👍 Destroyed versions {versions}")
+        elif action == "get-config":
+            cfg = manager.get_config()
+            print(f"👍 Config: {cfg}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
 
 
 if __name__ == "__main__":
