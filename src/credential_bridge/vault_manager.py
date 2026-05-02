@@ -5,7 +5,7 @@ import hvac
 import urllib3
 from pylogshield import PyLogShield, LogLevel, get_logger
 
-from .utils import VaultManagerError, get_session, get_vault_addr, load_config, save_config
+from .utils import VaultManagerError, get_session, load_config, save_config
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -15,6 +15,7 @@ class VaultManager:
 
     def __init__(
         self,
+        vault_addr: Optional[str] = None,
         vault_token: Optional[str] = None,
         vault_role_id: Optional[str] = None,
         vault_secret_id: Optional[str] = None,
@@ -28,7 +29,7 @@ class VaultManager:
     ):
         self.mask = mask
         self.service_name = service_name
-        
+
         # It must use PylogShield because it supports sensitive masking
         if logger and not isinstance(logger, PyLogShield):
             raise VaultManagerError(
@@ -41,9 +42,17 @@ class VaultManager:
         self.cert = cert if cert else False
         self.proxies = proxies
         self.session = get_session(cert, proxies)
-        self.vault_addr = get_vault_addr()
 
         config = load_config()
+
+        # Get vault_addr from parameter, environment variable, or config
+        if vault_addr:
+            self.vault_addr = vault_addr
+        else:
+            self.vault_addr = os.getenv("VAULT_ADDR") or config.get("vault_addr")
+
+        if not self.vault_addr:
+            raise VaultManagerError("Vault address must be provided via vault_addr parameter, VAULT_ADDR environment variable, or ~/.vault_config.json")
 
         # If user did not provide creds then get from config file
         self.vault_token = vault_token if vault_token else config.get("vault_token")

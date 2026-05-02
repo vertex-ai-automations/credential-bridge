@@ -10,7 +10,7 @@ from prompt_toolkit.styles import Style
 from .cli.keyring_cli import handle_commands as keyring_handle
 from .cli.vault_cli import handle_commands as vault_handle
 from .keyring_manager import KeyringManager
-from .utils import get_session, get_vault_addr, get_vault_credentials, load_welcome_banner, save_config
+from .utils import get_session, get_vault_credentials, load_welcome_banner, load_config, save_config
 from .vault_manager import VaultManager
 
 welcome_banner = load_welcome_banner("welcome_banner.txt")
@@ -21,11 +21,14 @@ option_style = Style.from_dict({"prompt": "fg:ansibrightcyan bold"})
 entry_style = Style.from_dict({"prompt": "fg:ansibrightgreen bold"})
 
 
-def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
+def is_vault_cred_valid(vault_addr=None, vault_token=None, role_id=None, secret_id=None):
     """Check if the provided vault token is valid."""
+    if not vault_addr:
+        print("❌ Vault address is required.")
+        return False
     if vault_token:
         try:
-            client = hvac.Client(url=get_vault_addr(), token=vault_token, session=get_session(), verify=False)
+            client = hvac.Client(url=vault_addr, token=vault_token, session=get_session(), verify=False)
             # Method returns true if valid
             return client.is_authenticated()
         except Exception as e:
@@ -33,7 +36,7 @@ def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
             return False
     elif role_id and secret_id:
         try:
-            client = hvac.Client(url=get_vault_addr(), session=get_session(), verify=False)
+            client = hvac.Client(url=vault_addr, session=get_session(), verify=False)
             client.auth.approle.login(role_id=role_id, secret_id=secret_id)
             # Method returns true if valid
             return client.is_authenticated()
@@ -118,10 +121,27 @@ def configure_vault():
         # Get existing credentials
         vault_token, vault_role_id, vault_secret_id = get_vault_credentials()
 
+        # Get vault address from environment or config
+        import os
+        vault_addr = os.getenv("VAULT_ADDR")
+        if not vault_addr:
+            from .utils import load_config
+            config = load_config()
+            vault_addr = config.get("vault_addr")
+
+        if not vault_addr:
+            vault_addr = prompt("⌨️ Enter Vault Address (e.g., https://vault.example.com): ", style=entry_style).strip()
+            if vault_addr:
+                config_data = load_config() if 'config' not in locals() else config
+                config_data["vault_addr"] = vault_addr
+                save_config(config_data)
+
         if auth_type == "vault_token" and not vault_token:
             vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-            if is_vault_cred_valid(vault_token=vault_token):
-                save_config({"vault_token": vault_token})
+            if is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
+                config_data = load_config()
+                config_data["vault_token"] = vault_token
+                save_config(config_data)
                 print("👍 Vault token saved successfully.")
             else:
                 print("ℹ️ Invalid Vault token. Please try again.")
@@ -130,22 +150,27 @@ def configure_vault():
         elif auth_type == "approle" and not (vault_role_id and vault_secret_id):
             vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
             vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-            if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                save_config({"vault_role_id": vault_role_id, "vault_secret_id": vault_secret_id})
+            if is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
+                config_data = load_config()
+                config_data["vault_role_id"] = vault_role_id
+                config_data["vault_secret_id"] = vault_secret_id
+                save_config(config_data)
                 print("👍 AppRole credentials saved successfully.")
             else:
                 print("ℹ️ Invalid Role ID or Secret ID. Please try again.")
                 continue
         else:
             if auth_type == "vault_token":
-                if not is_vault_cred_valid(vault_token=vault_token):
+                if not is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
                     print(
                         "📰 Existing Vault token is not valid or has expired. Please obtain a new Vault token from Vault UI:"
                     )
                     print(f"💻Vault Token: {vault_token}")
                     vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-                    if is_vault_cred_valid(vault_token=vault_token):
-                        save_config({"vault_token": vault_token})
+                    if is_vault_cred_valid(vault_addr=vault_addr, vault_token=vault_token):
+                        config_data = load_config()
+                        config_data["vault_token"] = vault_token
+                        save_config(config_data)
                         print("👍 Vault token saved successfully.")
                     else:
                         print("ℹ️ Invalid Vault token. Please try again.")
@@ -154,7 +179,7 @@ def configure_vault():
                     print("👍Existing Vault Token is still valid continuing...")
 
             if auth_type == "approle":
-                if not is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
+                if not is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
                     print(
                         "📰 Existing Vault Approle Credentials are not valid or has expired. Please obtain a new role or secret id from Vault UI:"
                     )
@@ -162,8 +187,11 @@ def configure_vault():
                     print(f"💻 App Secret ID: {vault_secret_id}")
                     vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
                     vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-                    if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                        save_config({"vault_role_id": vault_role_id, "vault_secret_id": vault_secret_id})
+                    if is_vault_cred_valid(vault_addr=vault_addr, role_id=vault_role_id, secret_id=vault_secret_id):
+                        config_data = load_config()
+                        config_data["vault_role_id"] = vault_role_id
+                        config_data["vault_secret_id"] = vault_secret_id
+                        save_config(config_data)
                         print("👍 AppRole credentials saved successfully.")
                     else:
                         print("ℹ️ Invalid Role ID or Secret ID. Please try again.")
