@@ -26,7 +26,7 @@ classifiers = [
 requires-python = ">=3.8"
 keywords = ["vault", "keyring", "credentials", "authentications", "wizard", "secrets"]
 
-dynamic = ["version", "dependencies"]
+dynamic = ["version"]
 license = 'MIT'
 license-files = ['LICENSE']
 
@@ -47,8 +47,6 @@ run-wizard  = "credential_bridge.prompt_wizard:main"
 dev = ["pytest>=7.0", "pytest-mock>=3.0"]
 fastapi = ["starlette>=0.27.0"]
 
-[tool.setuptools.dynamic]
-dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools_scm]
 # Auto generate _version.py with the corresponding git tag
