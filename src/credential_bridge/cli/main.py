@@ -1,5 +1,6 @@
 # src/credential_bridge/cli/main.py
 import typer
+from importlib.metadata import version, PackageNotFoundError
 
 from .env_cli import app as env_app
 from .keyring_cli import app as keyring_app
@@ -16,10 +17,31 @@ app.add_typer(keyring_app, name="keyring")
 app.add_typer(env_app, name="env")
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        try:
+            ver = version("credential-bridge")
+        except PackageNotFoundError:
+            ver = "unknown"
+        typer.echo(f"cb version {ver}")
+        raise typer.Exit()
+
+
+@app.callback()
+def root_callback(
+    version: bool = typer.Option(  # noqa: F811
+        False, "--version", "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
+    """Credential Bridge — unified secrets management CLI."""
+
+
 @app.command()
 def wizard():
     """Launch the interactive secrets wizard."""
-    # Use alias to avoid shadowing this module's main() entry point
     from ..prompt_wizard import main as _wizard_main
     _wizard_main()
 

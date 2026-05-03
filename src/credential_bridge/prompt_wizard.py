@@ -1,27 +1,129 @@
-# import subprocess
+# src/credential_bridge/prompt_wizard.py
 import sys
+from typing import Optional
 
-from prompt_toolkit import print_formatted_text, prompt
+from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.styles import Style
+from rich.align import Align
+from rich.console import Console
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
 
-from .utils import get_vault_credentials, load_welcome_banner, load_config, save_config
+from .utils import get_vault_credentials, load_config, load_welcome_banner, save_config
 
-welcome_banner = load_welcome_banner("welcome_banner.txt")
+# ── Rich console ──────────────────────────────────────────────────────────────
+console = Console()
 
-style_banner = f"<b><yellow>{welcome_banner}</yellow></b>"
+# ── prompt_toolkit styles ─────────────────────────────────────────────────────
+_opt_style = Style.from_dict({"prompt": "fg:ansibrightcyan bold"})
+_entry_style = Style.from_dict({"prompt": "fg:ansibrightgreen bold"})
 
-option_style = Style.from_dict({"prompt": "fg:ansibrightcyan bold"})
-entry_style = Style.from_dict({"prompt": "fg:ansibrightgreen bold"})
+# ── Shared history (persists across all prompts in a session) ─────────────────
+_history = InMemoryHistory()
 
 
-def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
+# ── Output helpers ─────────────────────────────────────────────────────────────
+
+def _success(msg: str) -> None:
+    console.print(f"  [green]✓[/green]  {msg}")
+
+
+def _error(msg: str) -> None:
+    console.print(f"  [red]✗[/red]  [red]{msg}[/red]")
+
+
+def _info(msg: str) -> None:
+    console.print(f"  [cyan]ℹ[/cyan]  [dim]{msg}[/dim]")
+
+
+def _section(title: str) -> None:
+    console.print(Rule(f"[bold #7c3aed]{title}[/bold #7c3aed]", style="#3730a3"))
+    console.print()
+
+
+def _print_banner() -> None:
+    """Render the ASCII welcome banner with Rich styling."""
+    try:
+        ascii_art = load_welcome_banner("welcome_banner.txt")
+    except Exception:
+        ascii_art = "Credential Bridge"
+
+    art = Text(ascii_art, style="bold #7c3aed", justify="center")
+    tagline = Text(
+        "\nUnified secrets management  ·  Vault  ·  Keyring  ·  .env",
+        style="dim #a78bfa",
+        justify="center",
+    )
+    combined = Text.assemble(art, tagline)
+
+    console.print(
+        Panel(
+            Align.center(combined),
+            border_style="#3730a3",
+            padding=(1, 6),
+        )
+    )
+    console.print()
+
+
+def _print_result_dict(data: dict, title: str = "") -> None:
+    """Display a secret dict as a syntax-highlighted JSON panel."""
+    import json
+    syntax = Syntax(json.dumps(data, indent=2), "json", theme="monokai")
+    console.print(
+        Panel(
+            syntax,
+            title=f"[bold cyan]{title}[/bold cyan]" if title else "",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+    )
+
+
+def _print_result_list(keys: list, title: str = "") -> None:
+    """Display a list of keys as a Rich table."""
+    table = Table(title=title, border_style="cyan", show_header=True, header_style="bold cyan")
+    table.add_column("Key", style="cyan")
+    for k in keys:
+        table.add_row(str(k))
+    console.print(table)
+
+
+def _prompt(text: str, completer=None, is_password: bool = False) -> str:
+    """Wrapper around prompt_toolkit's prompt with shared history."""
+    return prompt(
+        HTML(text),
+        completer=completer,
+        history=_history,
+        style=_entry_style,
+        is_password=is_password,
+    ).strip()
+
+
+def _menu_prompt(text: str, completer=None) -> str:
+    """Menu-style prompt with cyan styling."""
+    return prompt(
+        HTML(text),
+        completer=completer,
+        history=_history,
+        style=_opt_style,
+    ).strip().lower()
+
+
+# ── Vault credential validation ───────────────────────────────────────────────
+
+def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None) -> bool:
     """Validate Vault credentials by attempting authentication through VaultBackend."""
     import os
     vault_addr = os.environ.get("VAULT_ADDR", "")
     if not vault_addr:
-        print("❌ VAULT_ADDR environment variable not set.")
+        _error("VAULT_ADDR environment variable is not set.")
         return False
     try:
         from .manager import SecretsManager
@@ -32,28 +134,33 @@ def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
             kwargs["vault_role_id"] = role_id
             kwargs["vault_secret_id"] = secret_id
         else:
-            print("❌ No credentials provided.")
+            _error("No credentials provided.")
             return False
         SecretsManager("vault", **kwargs)
         return True
     except Exception as e:
-        print(f"❌ Authentication failed: {e}")
+        _error(f"Authentication failed: {e}")
         return False
 
 
-def main():
-    print_formatted_text(HTML(style_banner))
+# ── Main entry point ─────────────────────────────────────────────────────────
+
+def main() -> None:
+    _print_banner()
     while True:
-        service_completer = WordCompleter(["keyring", "vault", "env", "exit"], ignore_case=True)
-        service = (
-            prompt(
-                "🧰 Choose service (keyring/vault/env/exit): ",
-                completer=service_completer,
-                style=option_style,
-            )
-            .strip()
-            .lower()
+        _section("Main Menu")
+        service_completer = WordCompleter(
+            ["keyring", "vault", "env", "exit"], ignore_case=True
         )
+        try:
+            service = _menu_prompt(
+                "<b><ansibrightcyan>▶ Backend</ansibrightcyan></b>"
+                "  <ansiwhite>(keyring / vault / env / exit):</ansiwhite>  ",
+                completer=service_completer,
+            )
+        except (KeyboardInterrupt, EOFError):
+            _goodbye()
+            sys.exit(0)
 
         if service == "keyring":
             configure_keyring()
@@ -62,308 +169,361 @@ def main():
         elif service == "env":
             configure_env()
         elif service == "exit":
-            print(
-                "👋 Thank you for using the Credential Bridge Wizard."
-            )
+            _goodbye()
             sys.exit(0)
         else:
-            print("ℹ️ Invalid selection. Please choose 'keyring', 'vault', or 'env'❗")
-            continue
+            _error(f"Unknown selection '{service}'. Choose: keyring, vault, env, or exit.")
 
 
-def configure_keyring():
+def _goodbye() -> None:
+    console.print()
+    console.print(
+        Panel(
+            "[bold #7c3aed]Thank you for using Credential Bridge. Goodbye! 👋[/bold #7c3aed]",
+            border_style="#3730a3",
+            padding=(0, 2),
+        )
+    )
+
+
+# ── Keyring menu ─────────────────────────────────────────────────────────────
+
+def configure_keyring() -> None:
     while True:
-        action_completer = WordCompleter(["add", "update", "delete", "get", "back"], ignore_case=True)
-        action = (
-            prompt("🧰 Choose action (add/update/delete/get/back): ", completer=action_completer, style=option_style)
-            .strip()
-            .lower()
+        _section("Keyring")
+        action_completer = WordCompleter(
+            ["add", "update", "delete", "get", "back"], ignore_case=True
+        )
+        action = _menu_prompt(
+            "<b><ansibrightcyan>[Keyring]</ansibrightcyan></b>"
+            "  <ansiwhite>(add / get / update / delete / back):</ansiwhite>  ",
+            completer=action_completer,
         )
 
         if action == "back":
             return
-        elif action not in ["add", "update", "delete", "get", "back"]:
-            print(f"ℹ️ Invalid selection: {action}. Please try again❗")
+        if action not in ["add", "update", "delete", "get"]:
+            _error(f"Unknown action '{action}'.")
             continue
 
-        service_name = prompt("⌨️ Enter Service Name: ", style=entry_style).strip()
-        name = prompt("⌨️ Enter secret name: ", style=entry_style).strip()
-        secret = None
+        service_name = _prompt("<b><ansibrightgreen>  Service name:</ansibrightgreen>  ")
+        name = _prompt("<b><ansibrightgreen>  Secret name:</ansibrightgreen>   ")
+        secret: Optional[str] = None
 
         if action in ["add", "update"]:
-            secret = prompt("⌨️ Enter secret: ", style=entry_style).strip()
+            secret = _prompt(
+                "<b><ansibrightgreen>  Secret value:</ansibrightgreen>  ",
+                is_password=True,
+            )
 
         run_keyring_cli(action, service_name, name, secret)
+        console.print()
 
 
-def configure_vault():
+# ── Vault menu ────────────────────────────────────────────────────────────────
+
+def configure_vault() -> None:
     while True:
-        auth_type_completer = WordCompleter(["vault_token", "approle", "back"], ignore_case=True)
-        auth_type = (
-            prompt(
-                "🧰 Choose authentication type (vault_token/approle/back): ",
-                completer=auth_type_completer,
-                style=option_style,
-            )
-            .strip()
-            .lower()
+        _section("Vault  ·  Authentication")
+        auth_completer = WordCompleter(
+            ["vault_token", "approle", "back"], ignore_case=True
+        )
+        auth_type = _menu_prompt(
+            "<b><ansibrightcyan>[Vault]</ansibrightcyan></b>"
+            "  <ansiwhite>(vault_token / approle / back):</ansiwhite>  ",
+            completer=auth_completer,
         )
 
         if auth_type == "back":
             return
-        elif auth_type not in ["vault_token", "approle", "back"]:
-            print(f"ℹ️ Invalid selection: {auth_type}. Please try again❗")
+        if auth_type not in ["vault_token", "approle"]:
+            _error(f"Unknown auth type '{auth_type}'.")
             continue
 
-        # Get existing credentials
         vault_token, vault_role_id, vault_secret_id = get_vault_credentials()
 
-        if auth_type == "vault_token" and not vault_token:
-            vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-            if is_vault_cred_valid(vault_token=vault_token):
-                config_data = load_config()
-                config_data["vault_token"] = vault_token
-                save_config(config_data)
-                print("👍 Vault token saved successfully.")
-            else:
-                print("ℹ️ Invalid Vault token. Please try again.")
-                continue
-
-        elif auth_type == "approle" and not (vault_role_id and vault_secret_id):
-            vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
-            vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-            if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                config_data = load_config()
-                config_data["vault_role_id"] = vault_role_id
-                config_data["vault_secret_id"] = vault_secret_id
-                save_config(config_data)
-                print("👍 AppRole credentials saved successfully.")
-            else:
-                print("ℹ️ Invalid Role ID or Secret ID. Please try again.")
-                continue
-        else:
-            if auth_type == "vault_token":
-                if not is_vault_cred_valid(vault_token=vault_token):
-                    print(
-                        "📰 Existing Vault token is not valid or has expired. Please obtain a new Vault token from Vault UI:"
-                    )
-                    print(f"💻 Existing Vault Token: ...{vault_token[-4:]}")
-                    vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
-                    if is_vault_cred_valid(vault_token=vault_token):
-                        config_data = load_config()
-                        config_data["vault_token"] = vault_token
-                        save_config(config_data)
-                        print("👍 Vault token saved successfully.")
-                    else:
-                        print("ℹ️ Invalid Vault token. Please try again.")
-                        continue
-                else:
-                    print("👍Existing Vault Token is still valid continuing...")
-
-            if auth_type == "approle":
-                if not is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                    print(
-                        "📰 Existing Vault Approle Credentials are not valid or has expired. Please obtain a new role or secret id from Vault UI:"
-                    )
-                    print(f"💻 Existing Role ID: ...{vault_role_id[-4:]}")
-                    print(f"💻 Existing Secret ID: ...{vault_secret_id[-4:]}")
-                    vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
-                    vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
-                    if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                        config_data = load_config()
-                        config_data["vault_role_id"] = vault_role_id
-                        config_data["vault_secret_id"] = vault_secret_id
-                        save_config(config_data)
-                        print("👍 AppRole credentials saved successfully.")
-                    else:
-                        print("ℹ️ Invalid Role ID or Secret ID. Please try again.")
-                        continue
-                else:
-                    print("👍Existing Approle credentials are still valid continuing...")
-
-        while True:
-            action_completer = WordCompleter(
-                [
-                    "add",
-                    "update",
-                    "delete",
-                    "get",
-                    "list",
-                    "read-metadata",
-                    "delete-versions",
-                    "undelete-versions",
-                    "destroy-versions",
-                    "get-config",
-                    "back",
-                ],
-                ignore_case=True,
-            )
-            action = (
-                prompt(
-                    "🧰 Choose action (add/update/delete/get/list/read-metadata/delete-versions/undelete-versions/destroy-versions/back): ",
-                    completer=action_completer,
-                    style=option_style,
+        if auth_type == "vault_token":
+            if not vault_token:
+                vault_token = _prompt(
+                    "<b><ansibrightgreen>  Vault Token:</ansibrightgreen>  ",
+                    is_password=True,
                 )
-                .strip()
-                .lower()
-            )
+                if is_vault_cred_valid(vault_token=vault_token):
+                    _save_vault_token(vault_token)
+                    _success("Vault token saved.")
+                else:
+                    _error("Invalid token. Please try again.")
+                    continue
+            else:
+                if not is_vault_cred_valid(vault_token=vault_token):
+                    _info(f"Existing token (...{vault_token[-4:]}) has expired.")
+                    vault_token = _prompt(
+                        "<b><ansibrightgreen>  New Vault Token:</ansibrightgreen>  ",
+                        is_password=True,
+                    )
+                    if is_vault_cred_valid(vault_token=vault_token):
+                        _save_vault_token(vault_token)
+                        _success("Vault token updated.")
+                    else:
+                        _error("Invalid token. Please try again.")
+                        continue
+                else:
+                    _success("Existing token is valid.")
 
-            if action == "back":
-                return
-            elif action not in [
-                "add",
-                "update",
-                "delete",
-                "get",
-                "list",
-                "read-metadata",
-                "delete-versions",
-                "undelete-versions",
-                "destroy-versions",
-                "get-config",
-                "back",
-            ]:
-                print(f"ℹ️ Invalid selection: {action}. Please try again❗")
-                continue
+        elif auth_type == "approle":
+            if not (vault_role_id and vault_secret_id):
+                vault_role_id = _prompt(
+                    "<b><ansibrightgreen>  Role ID:</ansibrightgreen>    ",
+                    is_password=True,
+                )
+                vault_secret_id = _prompt(
+                    "<b><ansibrightgreen>  Secret ID:</ansibrightgreen>  ",
+                    is_password=True,
+                )
+                if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
+                    _save_vault_approle(vault_role_id, vault_secret_id)
+                    _success("AppRole credentials saved.")
+                else:
+                    _error("Invalid AppRole credentials. Please try again.")
+                    continue
+            else:
+                if not is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
+                    _info(
+                        f"Existing AppRole (...{vault_role_id[-4:]}) has expired."
+                    )
+                    vault_role_id = _prompt(
+                        "<b><ansibrightgreen>  New Role ID:</ansibrightgreen>    ",
+                        is_password=True,
+                    )
+                    vault_secret_id = _prompt(
+                        "<b><ansibrightgreen>  New Secret ID:</ansibrightgreen>  ",
+                        is_password=True,
+                    )
+                    if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
+                        _save_vault_approle(vault_role_id, vault_secret_id)
+                        _success("AppRole credentials updated.")
+                    else:
+                        _error("Invalid credentials. Please try again.")
+                        continue
+                else:
+                    _success("Existing AppRole credentials are valid.")
 
-            service_name = prompt("⌨️ Enter Service Name (tag): ", style=entry_style).strip()
-            secret_path = prompt("⌨️ Enter Secret Path (e.g. myapp/database): ", style=entry_style).strip()
-
-            secret_data = {}
-            versions = None
-
-            if action in ["add", "update"]:
-                while True:
-                    try:
-                        num_secrets = int(
-                            prompt(
-                                f"⌨️ Enter the number of secrets to add for {service_name}: ", style=entry_style
-                            ).strip()
-                        )
-                        break
-                    except ValueError:
-                        print("ℹ️ Invalid input. PLease enter a numeric value.")
-
-                for _ in range(num_secrets):
-                    secret_name = prompt("⌨️ Enter Secret Name: ", style=entry_style).strip()
-                    secret_value = prompt("⌨️ Enter Secret Value: ", style=entry_style).strip()
-                    secret_data[secret_name] = secret_value
-
-            if action in ["delete-versions", "undelete-versions", "destroy-versions"]:
-                versions = []
-                while True:
-                    try:
-                        num_versions = int(
-                            prompt(
-                                "⌨️ Enter the number of versions to delete/undelete/destroy: ", style=entry_style
-                            ).strip()
-                        )
-                        for _ in range(num_versions):
-                            version = int(prompt("⌨️ Enter version number: ", style=entry_style).strip())
-                            versions.append(version)
-                        break
-                    except ValueError:
-                        print("ℹ️ Invalid input. Please enter numeric values for versions.")
-
-            run_vault_cli(action, service_name, secret_path, secret_data, versions)
+        _vault_action_loop(auth_type)
+        return
 
 
-def configure_env():
-    from .backends.env_file import EnvFileBackend
+def _save_vault_token(token: str) -> None:
+    cfg = load_config()
+    cfg.update({"vault_token": token, "vault_role_id": None, "vault_secret_id": None})
+    save_config(cfg)
+
+
+def _save_vault_approle(role_id: str, secret_id: str) -> None:
+    cfg = load_config()
+    cfg.update({"vault_role_id": role_id, "vault_secret_id": secret_id, "vault_token": None})
+    save_config(cfg)
+
+
+def _vault_action_loop(auth_label: str) -> None:
+    _VAULT_ACTIONS = [
+        "add", "update", "delete", "get", "list",
+        "read-metadata", "delete-versions", "undelete-versions",
+        "destroy-versions", "get-config", "back",
+    ]
+    action_completer = WordCompleter(_VAULT_ACTIONS, ignore_case=True)
+
     while True:
-        action_completer = WordCompleter(["add", "get", "update", "delete", "list", "back"], ignore_case=True)
-        action = (
-            prompt("🧰 Choose action (add/get/update/delete/list/back): ",
-                   completer=action_completer, style=option_style)
-            .strip().lower()
+        _section(f"Vault  ·  {auth_label.replace('_', ' ').title()}")
+        action = _menu_prompt(
+            f"<b><ansibrightcyan>[Vault › {auth_label}]</ansibrightcyan></b>"
+            "  <ansiwhite>(add/get/update/delete/list/… /back):</ansiwhite>  ",
+            completer=action_completer,
         )
+
         if action == "back":
             return
-        env_path = prompt("⌨️ Enter .env file path (default: .env): ", style=entry_style).strip() or ".env"
+        if action not in _VAULT_ACTIONS:
+            _error(f"Unknown action '{action}'.")
+            continue
+
+        service_name = _prompt(
+            "<b><ansibrightgreen>  Service name (tag):</ansibrightgreen>    "
+        )
+        secret_path = _prompt(
+            "<b><ansibrightgreen>  Secret path (e.g. myapp/db):</ansibrightgreen>  "
+        )
+
+        secret_data: dict = {}
+        versions = None
+
+        if action in ["add", "update"]:
+            while True:
+                try:
+                    num = int(
+                        _prompt(
+                            "<b><ansibrightgreen>  Number of key-value pairs:</ansibrightgreen>  "
+                        )
+                    )
+                    break
+                except ValueError:
+                    _error("Please enter a numeric value.")
+
+            for i in range(num):
+                k = _prompt(f"<b><ansibrightgreen>  Key {i + 1}:</ansibrightgreen>    ")
+                v = _prompt(
+                    f"<b><ansibrightgreen>  Value {i + 1}:</ansibrightgreen>  ",
+                    is_password=True,
+                )
+                secret_data[k] = v
+
+        if action in ["delete-versions", "undelete-versions", "destroy-versions"]:
+            while True:
+                try:
+                    num = int(
+                        _prompt(
+                            "<b><ansibrightgreen>  Number of versions:</ansibrightgreen>  "
+                        )
+                    )
+                    versions = []
+                    for _ in range(num):
+                        versions.append(
+                            int(_prompt("<b><ansibrightgreen>  Version number:</ansibrightgreen>  "))
+                        )
+                    break
+                except ValueError:
+                    _error("Please enter numeric values for versions.")
+
+        run_vault_cli(action, service_name, secret_path, secret_data, versions)
+        console.print()
+
+
+# ── .env menu ────────────────────────────────────────────────────────────────
+
+def configure_env() -> None:
+    _section(".env File")
+    env_path = _prompt(
+        "<b><ansibrightgreen>  .env file path</ansibrightgreen>"
+        "  <ansiwhite>(default: .env):</ansiwhite>  "
+    ) or ".env"
+
+    from .backends.env_file import EnvFileBackend
+
+    while True:
+        _section(f".env  ·  {env_path}")
+        action_completer = WordCompleter(
+            ["add", "get", "update", "delete", "list", "back"], ignore_case=True
+        )
+        action = _menu_prompt(
+            f"<b><ansibrightcyan>[.env › {env_path}]</ansibrightcyan></b>"
+            "  <ansiwhite>(add / get / update / delete / list / back):</ansiwhite>  ",
+            completer=action_completer,
+        )
+
+        if action == "back":
+            return
+        if action not in ["add", "get", "update", "delete", "list"]:
+            _error(f"Unknown action '{action}'.")
+            continue
+
         backend = EnvFileBackend(path=env_path)
+
         try:
             if action == "list":
                 keys = backend.list_secrets()
-                print(f"Keys in {env_path}: {keys}")
+                _print_result_list(keys, title=f"Keys in {env_path}")
+
             elif action in ["add", "update"]:
-                name = prompt("⌨️ Enter key name: ", style=entry_style).strip()
-                value = prompt("⌨️ Enter value: ", style=entry_style).strip()
+                name = _prompt("<b><ansibrightgreen>  Key name:</ansibrightgreen>   ")
+                value = _prompt("<b><ansibrightgreen>  Value:</ansibrightgreen>      ")
                 if action == "add":
                     backend.add_secret(name, {name: value})
                 else:
                     backend.update_secret(name, {name: value})
-                print(f"👍 {action.capitalize()} successful.")
-            elif action in ["get", "delete"]:
-                name = prompt("⌨️ Enter key name: ", style=entry_style).strip()
-                if action == "get":
-                    result = backend.get_secret(name)
-                    print(f"👍 {name} = {result.get(name)}")
-                else:
-                    backend.delete_secret(name)
-                    print(f"👍 {name} deleted.")
+                _success(f"{action.capitalize()} successful: [bold]{name}[/bold]")
+
+            elif action == "get":
+                name = _prompt("<b><ansibrightgreen>  Key name:</ansibrightgreen>  ")
+                result = backend.get_secret(name)
+                _print_result_dict(result, title=name)
+
+            elif action == "delete":
+                name = _prompt("<b><ansibrightgreen>  Key name:</ansibrightgreen>  ")
+                backend.delete_secret(name)
+                _success(f"Deleted [bold]{name}[/bold] from {env_path}.")
+
         except Exception as e:
-            print(f"❌ Error: {e}")
+            _error(str(e))
+
+        console.print()
 
 
-def run_keyring_cli(action, service_name, name, secret):
+# ── Dispatch helpers ─────────────────────────────────────────────────────────
+
+def run_keyring_cli(action: str, service_name: str, name: str, secret: Optional[str]) -> None:
     from .manager import SecretsManager
     manager = SecretsManager("keyring", service_name=service_name)
     try:
         if action == "add":
             manager.add_secret(name, {name: secret})
-            print(f"👍 Added: {service_name} / {name}")
+            _success(f"Added [bold]{name}[/bold] to keyring service '{service_name}'.")
         elif action == "get":
             result = manager.get_secret(name)
-            print(f"👍 {name} = {result.get(name)}")
+            _print_result_dict(result, title=name)
         elif action == "update":
             manager.update_secret(name, {name: secret})
-            print(f"👍 Updated: {service_name} / {name}")
+            _success(f"Updated [bold]{name}[/bold] in keyring service '{service_name}'.")
         elif action == "delete":
             manager.delete_secret(name)
-            print(f"👍 Deleted: {service_name} / {name}")
+            _success(f"Deleted [bold]{name}[/bold] from keyring service '{service_name}'.")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        _error(str(e))
 
 
-def run_vault_cli(action, service_name, secret_path, secret_data, versions=None):
+def run_vault_cli(
+    action: str,
+    service_name: str,
+    secret_path: str,
+    secret_data: dict,
+    versions=None,
+) -> None:
     from .manager import SecretsManager
     manager = SecretsManager("vault", service_name=service_name)
     try:
         if action == "add":
             manager.add_secret(secret_path, secret_data)
-            print(f"👍 Added: {secret_path}")
+            _success(f"Secret [bold]{secret_path}[/bold] added.")
         elif action == "get":
             result = manager.get_secret(secret_path)
-            print(f"👍 {secret_path}: {result}")
+            _print_result_dict(result, title=secret_path)
         elif action == "update":
             manager.update_secret(secret_path, secret_data)
-            print(f"👍 Updated: {secret_path}")
+            _success(f"Secret [bold]{secret_path}[/bold] updated.")
         elif action == "delete":
             manager.delete_secret(secret_path)
-            print(f"👍 Deleted: {secret_path}")
+            _success(f"Secret [bold]{secret_path}[/bold] deleted.")
         elif action == "list":
             keys = manager.list_secrets(secret_path)
-            print(f"👍 Keys: {keys}")
-        elif action in ("read-metadata", "delete-versions", "undelete-versions", "destroy-versions", "get-config"):
+            _print_result_list(keys, title=f"Secrets at {secret_path or '/'}")
+        elif action in ("read-metadata", "delete-versions", "undelete-versions",
+                        "destroy-versions", "get-config"):
             vault_backend = manager.backend
             if action == "read-metadata":
                 meta = vault_backend.read_secret_metadata(secret_path)
-                print(f"👍 Metadata: {meta}")
+                _print_result_dict(meta, title=f"Metadata: {secret_path}")
             elif action == "delete-versions":
                 vault_backend.delete_secret_versions(secret_path, versions)
-                print(f"👍 Deleted versions {versions} of {secret_path}")
+                _success(f"Soft-deleted versions {versions} of [bold]{secret_path}[/bold].")
             elif action == "undelete-versions":
                 vault_backend.undelete_secret_versions(secret_path, versions)
-                print(f"👍 Undeleted versions {versions} of {secret_path}")
+                _success(f"Restored versions {versions} of [bold]{secret_path}[/bold].")
             elif action == "destroy-versions":
                 vault_backend.destroy_secret_versions(secret_path, versions)
-                print(f"👍 Destroyed versions {versions} of {secret_path}")
+                _success(f"Permanently destroyed versions {versions} of [bold]{secret_path}[/bold].")
             elif action == "get-config":
                 cfg = vault_backend.get_config()
-                print(f"👍 Config: {cfg}")
-        print(f"👍 {action} completed.")
+                _print_result_dict(cfg, title="Vault Config")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        _error(str(e))
 
 
 if __name__ == "__main__":
