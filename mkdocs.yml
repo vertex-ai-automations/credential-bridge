@@ -207,20 +207,17 @@ extra:
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/credential-bridge/
       name: Credential Bridge on PyPI
-  analytics:
-    provider: google
-    property: G-XXXXXXXXXX
-    feedback:
-      title: Was this page helpful?
-      ratings:
-        - icon: material/emoticon-happy-outline
-          name: This page was helpful
-          data: 1
-          note: Thanks for your feedback!
-        - icon: material/emoticon-sad-outline
-          name: This page could be improved
-          data: 0
-          note: Thanks for your feedback! Help us improve by opening an issue.
+  feedback:
+    title: Was this page helpful?
+    ratings:
+      - icon: material/emoticon-happy-outline
+        name: This page was helpful
+        data: 1
+        note: Thanks for your feedback!
+      - icon: material/emoticon-sad-outline
+        name: This page could be improved
+        data: 0
+        note: Thanks for your feedback! Help us improve by opening an issue.
 
 copyright: >
   Copyright &copy; 2024-2026 Vertex AI Automations –

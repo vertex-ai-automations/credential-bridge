@@ -38,13 +38,12 @@ def test_partial_subclass_raises_type_error():
         Partial()
 
 
-def test_backend_name_default_is_empty_string():
-    """Should have empty string as default backend_name."""
-    class Complete(BaseSecretBackend):
-        def add_secret(self, name, secret): pass
-        def get_secret(self, name): return {}
-        def update_secret(self, name, secret): pass
-        def delete_secret(self, name): pass
-        def list_secrets(self, path=""): return []
-
-    assert Complete.backend_name == ""
+def test_backend_name_enforced_on_concrete_subclass():
+    """Concrete subclass without backend_name should raise TypeError at class definition."""
+    with pytest.raises(TypeError, match="backend_name"):
+        class Complete(BaseSecretBackend):
+            def add_secret(self, name, secret): pass
+            def get_secret(self, name): return {}
+            def update_secret(self, name, secret): pass
+            def delete_secret(self, name): pass
+            def list_secrets(self, path=""): return []

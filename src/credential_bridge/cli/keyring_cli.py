@@ -14,12 +14,15 @@ app = typer.Typer(name="keyring", help="System keyring secret operations", no_ar
 console = Console()
 err_console = Console(stderr=True)
 
+# Shared service-name option — defined once, referenced by each command
+_SERVICE = typer.Option("default", "--service-name", "-s", help="Keyring service name (default: 'default')")
+
 
 @app.command()
 def add(
     name: str = typer.Argument(..., help="Secret key name"),
     secret: Optional[List[str]] = typer.Option(None, "--secret", help="KEY=value pairs"),
-    service_name: str = typer.Option(..., "--service-name", "-s", help="Keyring service name"),
+    service_name: str = _SERVICE,
 ):
     """Add a secret to the system keyring."""
     if not secret:
@@ -38,7 +41,7 @@ def add(
 @app.command()
 def get(
     name: str = typer.Argument(..., help="Secret key name"),
-    service_name: str = typer.Option(..., "--service-name", "-s"),
+    service_name: str = _SERVICE,
 ):
     """Retrieve a secret from the system keyring."""
     backend = KeyringBackend(service_name=service_name)
@@ -55,7 +58,7 @@ def get(
 def update(
     name: str = typer.Argument(..., help="Secret key name"),
     secret: Optional[List[str]] = typer.Option(None, "--secret", help="KEY=value pairs"),
-    service_name: str = typer.Option(..., "--service-name", "-s"),
+    service_name: str = _SERVICE,
 ):
     """Update an existing keyring secret."""
     if not secret:
@@ -74,7 +77,7 @@ def update(
 @app.command()
 def delete(
     name: str = typer.Argument(..., help="Secret key name"),
-    service_name: str = typer.Option(..., "--service-name", "-s"),
+    service_name: str = _SERVICE,
     confirm: bool = typer.Option(False, "--yes", "-y"),
 ):
     """Delete a secret from the system keyring."""

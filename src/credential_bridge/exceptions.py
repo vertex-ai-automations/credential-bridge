@@ -33,6 +33,10 @@ class EnvFileNotFoundError(EnvFileError):
     """A requested key does not exist in the .env file."""
 
 
+class EnvFileKeyExistsError(EnvFileError):
+    """A key being added already exists in the .env file."""
+
+
 class BackendNotRegisteredError(CredentialBridgeError):
     """Backend name not found in SecretsManager registry."""
 

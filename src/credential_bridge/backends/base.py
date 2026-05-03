@@ -9,9 +9,32 @@ class BaseSecretBackend(ABC):
 
     backend_name: str = ""
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # __abstractmethods__ is not yet populated when __init_subclass__ runs,
+        # so we collect abstract method names from the MRO manually.
+        abstract_names = {
+            name
+            for base in cls.__mro__
+            for name, val in vars(base).items()
+            if getattr(val, "__isabstractmethod__", False)
+        }
+        # Only enforce backend_name on concrete (fully-implemented) subclasses
+        overridden = {
+            name
+            for name in abstract_names
+            if name in cls.__dict__ and not getattr(cls.__dict__[name], "__isabstractmethod__", False)
+        }
+        if abstract_names and overridden >= abstract_names:
+            # All abstract methods are implemented — this is a concrete subclass
+            if not cls.backend_name:
+                raise TypeError(
+                    f"{cls.__name__} must define a non-empty 'backend_name' class attribute."
+                )
+
     @abstractmethod
     def add_secret(self, name: str, secret: Dict[str, Any]) -> None:
-        """Store a new secret. Raises if name already exists."""
+        """Store a new secret. Creates a new version if the secret already exists (Vault); raises if key already exists (EnvFile)."""
 
     @abstractmethod
     def get_secret(self, name: str) -> Dict[str, Any]:

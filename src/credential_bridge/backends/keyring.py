@@ -68,8 +68,15 @@ class KeyringBackend(BaseSecretBackend):
 
     def delete_secret(self, name: str) -> None:
         try:
+            existing = keyring.get_password(self.service_name, name)
+            if existing is None:
+                raise KeyringError(
+                    f"Secret '{name}' not found in keyring service '{self.service_name}'."
+                )
             keyring.delete_password(self.service_name, name)
             self.logger.info(f"Keyring secret deleted: {name}")
+        except KeyringError:
+            raise
         except _KeyringLibError as e:
             raise KeyringError(f"Failed to delete '{name}': {e}") from e
 

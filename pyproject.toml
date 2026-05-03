@@ -43,6 +43,7 @@ Repository = "https://github.com/vertex-ai-automations/credential-bridge"
 cb          = "credential_bridge.cli.main:main"
 vault-cli   = "credential_bridge.cli.vault_cli:main"
 keyring-cli = "credential_bridge.cli.keyring_cli:main"
+env-cli     = "credential_bridge.cli.env_cli:main"
 run-wizard  = "credential_bridge.prompt_wizard:main"
 
 [tool.setuptools.packages.find]
@@ -60,3 +61,17 @@ version_file = "src/credential_bridge/_version.py"
 markers = [
     "integration: marks tests as integration tests (may require external services)",
 ]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

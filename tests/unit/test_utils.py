@@ -24,7 +24,7 @@ def test_get_session_returns_requests_session():
     import requests
     session = u.get_session()
     assert isinstance(session, requests.Session)
-    assert session.verify is False
+    assert session.verify is True
 
 
 def test_get_session_with_cert():

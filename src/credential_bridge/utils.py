@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -23,15 +24,27 @@ def load_welcome_banner(file_path: str) -> str:
 
 def save_config(data: Dict[str, Any]) -> None:
     """Save configuration data to CONFIG_FILE as JSON."""
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    import sys
+    if sys.platform != "win32":
+        # Write with restricted permissions so only the owner can read the file
+        fd = os.open(str(CONFIG_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+    else:
+        # Windows: NTFS ACLs require win32security; write normally and warn
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+        logger.warning(
+            "Config written to %s — consider restricting file permissions manually on Windows.",
+            CONFIG_FILE,
+        )
 
 
 def load_config() -> Dict[str, Any]:
     """Load configuration data from CONFIG_FILE. Returns empty dict if file doesn't exist."""
     logger.debug("Loading config file...")
     if CONFIG_FILE.exists():
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
@@ -69,7 +82,7 @@ def get_session(
     logger.info(f"Session created: Cert: {cert}, Proxies: {proxies}")
     session = requests.Session()
     session.trust_env = False
-    session.verify = cert if cert else False
+    session.verify = cert if cert else True   # True = use system CA bundle
     session.proxies = proxies or {}
     return session
 

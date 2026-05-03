@@ -1,12 +1,11 @@
 """HashiCorp Vault backend for credential-bridge."""
 
-import logging
 import os
 from typing import Any, Dict, List, Optional, Union
 
 import hvac
 import requests
-import urllib3
+from pylogshield import LogLevel, PyLogShield, get_logger
 
 from credential_bridge.backends.base import BaseSecretBackend
 from credential_bridge.exceptions import (
@@ -16,19 +15,6 @@ from credential_bridge.exceptions import (
     VaultError,
 )
 from credential_bridge.utils import get_session, load_config, save_config
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-logger = logging.getLogger(__name__)
-
-
-# Minimal LogLevel shim so callers can pass log_level without pylogshield.
-class LogLevel:
-    DEBUG = logging.DEBUG
-    INFO = logging.INFO
-    WARNING = logging.WARNING
-    ERROR = logging.ERROR
-    CRITICAL = logging.CRITICAL
 
 
 class VaultBackend(BaseSecretBackend):
@@ -46,20 +32,23 @@ class VaultBackend(BaseSecretBackend):
         mount_point: str = "secret",
         proxies: Optional[Dict[str, str]] = None,
         cert: Optional[str] = None,
-        log_level: Union[int, str] = logging.WARNING,
-        logger: Optional[logging.Logger] = None,
+        log_level: Union[LogLevel, str] = LogLevel.WARNING,
+        logger: Optional[PyLogShield] = None,
         mask: bool = True,
+        persist: bool = False,   # opt-in credential persistence to ~/.vault_config.json
     ) -> None:
         self.mask = mask
         self.service_name = service_name
         self.mount_point = mount_point
-        self.cert = cert if cert else False
+        self.cert = cert  # None means use system CA bundle; path string means custom cert
         self.proxies = proxies
-        self._logger = logger or logging.getLogger(__name__)
 
-        # Configure log level when we own the logger
-        if not logger:
-            self._logger.setLevel(log_level)
+        if logger and not isinstance(logger, PyLogShield):
+            raise ConfigurationError(
+                "logger must be a PyLogShield instance. "
+                "Use: from pylogshield import PyLogShield"
+            )
+        self.logger = logger or get_logger(name="credential_bridge", log_level=log_level, force=True)
 
         self.session = get_session(cert, proxies)
 
@@ -95,20 +84,21 @@ class VaultBackend(BaseSecretBackend):
                 "or AppRole credentials."
             )
 
-        # --- Persist credentials to config ---
-        if vault_token:
-            config["vault_token"] = vault_token
-            config["vault_role_id"] = None
-            config["vault_secret_id"] = None
-        elif vault_role_id and vault_secret_id:
-            config["vault_role_id"] = vault_role_id
-            config["vault_secret_id"] = vault_secret_id
-            config["vault_token"] = None
+        # --- Persist credentials to config (opt-in) ---
+        if persist:
+            if vault_token:
+                config["vault_token"] = vault_token
+                config["vault_role_id"] = None
+                config["vault_secret_id"] = None
+            elif vault_role_id and vault_secret_id:
+                config["vault_role_id"] = vault_role_id
+                config["vault_secret_id"] = vault_secret_id
+                config["vault_token"] = None
 
-        if vault_url:
-            config["vault_addr"] = vault_url
+            if vault_url:
+                config["vault_addr"] = vault_url
 
-        save_config(config)
+            save_config(config)
 
         self.client = self._authenticate()
 
@@ -118,7 +108,7 @@ class VaultBackend(BaseSecretBackend):
 
     def _authenticate(self) -> hvac.Client:
         """Authenticate with Vault using a token or AppRole credentials."""
-        self._logger.info("Authenticating with Vault...")
+        self.logger.info("Authenticating with Vault...")
         try:
             if self.vault_token:
                 client = hvac.Client(
@@ -131,7 +121,7 @@ class VaultBackend(BaseSecretBackend):
                     raise VaultAuthError(
                         "Failed to authenticate with Vault using token."
                     )
-                self._logger.info("Authenticated with Vault via token.")
+                self.logger.info("Authenticated with Vault via token.")
                 return client
 
             # AppRole
@@ -149,7 +139,7 @@ class VaultBackend(BaseSecretBackend):
                     "Failed to authenticate with Vault using AppRole."
                 )
             client.token = auth_response["auth"]["client_token"]
-            self._logger.info("Authenticated with Vault via AppRole.")
+            self.logger.info("Authenticated with Vault via AppRole.")
             return client
 
         except VaultAuthError:
@@ -173,18 +163,18 @@ class VaultBackend(BaseSecretBackend):
             lookup = self.client.auth.token.lookup_self()
             ttl = lookup["data"]["ttl"]
             if ttl < 300:
-                self._logger.info("Vault token TTL low, renewing...")
+                self.logger.info("Vault token TTL low, renewing...")
                 self.client.auth.token.renew_self(increment="0")
-                self._logger.info("Vault token renewed.")
+                self.logger.info("Vault token renewed.")
         except Exception as exc:
-            self._logger.warning(f"Could not refresh Vault token: {exc}")
+            self.logger.warning(f"Could not refresh Vault token: {exc}")
 
     # ------------------------------------------------------------------
     # BaseSecretBackend interface
     # ------------------------------------------------------------------
 
     def add_secret(self, name: str, secret: Dict[str, Any]) -> None:
-        """Store a new secret at *name*."""
+        """Add or update a secret in Vault (creates a new KV-v2 version)."""
         self._refresh_token_if_needed()
         try:
             self.client.secrets.kv.v2.create_or_update_secret(
@@ -192,7 +182,7 @@ class VaultBackend(BaseSecretBackend):
                 secret=secret,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Secret added: {name}")
+            self.logger.info(f"Secret added: {name}")
         except Exception as exc:
             raise VaultError(f"Failed to add secret '{name}': {exc}") from exc
 
@@ -217,7 +207,7 @@ class VaultBackend(BaseSecretBackend):
                 secret=secret,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Secret updated: {name}")
+            self.logger.info(f"Secret updated: {name}")
         except Exception as exc:
             raise VaultError(f"Failed to update secret '{name}': {exc}") from exc
 
@@ -229,7 +219,7 @@ class VaultBackend(BaseSecretBackend):
                 path=name,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Secret deleted: {name}")
+            self.logger.info(f"Secret deleted: {name}")
         except Exception as exc:
             raise VaultError(f"Failed to delete secret '{name}': {exc}") from exc
 
@@ -281,7 +271,7 @@ class VaultBackend(BaseSecretBackend):
                 versions=versions,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Soft-deleted versions {versions} of '{name}'.")
+            self.logger.info(f"Soft-deleted versions {versions} of '{name}'.")
         except Exception as exc:
             raise VaultError(
                 f"Failed to delete versions {versions} of '{name}': {exc}"
@@ -296,7 +286,7 @@ class VaultBackend(BaseSecretBackend):
                 versions=versions,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Undeleted versions {versions} of '{name}'.")
+            self.logger.info(f"Undeleted versions {versions} of '{name}'.")
         except Exception as exc:
             raise VaultError(
                 f"Failed to undelete versions {versions} of '{name}': {exc}"
@@ -311,7 +301,7 @@ class VaultBackend(BaseSecretBackend):
                 versions=versions,
                 mount_point=self.mount_point,
             )
-            self._logger.info(f"Destroyed versions {versions} of '{name}'.")
+            self.logger.info(f"Destroyed versions {versions} of '{name}'.")
         except Exception as exc:
             raise VaultError(
                 f"Failed to destroy versions {versions} of '{name}': {exc}"

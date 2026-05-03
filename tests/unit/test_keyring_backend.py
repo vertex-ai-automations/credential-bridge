@@ -55,10 +55,19 @@ def test_update_secret_raises_when_not_found(mocker, mock_logger):
 
 
 def test_delete_secret(mocker, mock_logger):
+    stored = json.dumps({"user": "admin"})
+    mocker.patch("credential_bridge.backends.keyring.keyring.get_password", return_value=stored)
     mock_del = mocker.patch("credential_bridge.backends.keyring.keyring.delete_password")
     backend = KeyringBackend(service_name="svc")
     backend.delete_secret("mykey")
     mock_del.assert_called_once_with("svc", "mykey")
+
+
+def test_delete_secret_raises_if_not_found(mocker, mock_logger):
+    mocker.patch("credential_bridge.backends.keyring.keyring.get_password", return_value=None)
+    backend = KeyringBackend(service_name="svc")
+    with pytest.raises(KeyringError, match="not found"):
+        backend.delete_secret("missing_key")
 
 
 def test_list_secrets_raises_not_implemented(mocker, mock_logger):

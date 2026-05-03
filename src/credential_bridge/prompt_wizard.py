@@ -25,14 +25,14 @@ def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
         return False
     if vault_token:
         try:
-            client = hvac.Client(url=vault_addr, token=vault_token, verify=False)
+            client = hvac.Client(url=vault_addr, token=vault_token, verify=True)
             return client.is_authenticated()
         except Exception as e:
             print(f"❌ Error validating vault token: {e}")
             return False
     elif role_id and secret_id:
         try:
-            client = hvac.Client(url=vault_addr, verify=False)
+            client = hvac.Client(url=vault_addr, verify=True)
             client.auth.approle.login(role_id=role_id, secret_id=secret_id)
             return client.is_authenticated()
         except Exception as e:
@@ -148,7 +148,7 @@ def configure_vault():
                     print(
                         "📰 Existing Vault token is not valid or has expired. Please obtain a new Vault token from Vault UI:"
                     )
-                    print(f"💻Vault Token: {vault_token}")
+                    print(f"💻 Existing Vault Token: ...{vault_token[-4:]}")
                     vault_token = prompt("⌨️ Enter Vault Token: ", style=entry_style).strip()
                     if is_vault_cred_valid(vault_token=vault_token):
                         config_data = load_config()
@@ -166,8 +166,8 @@ def configure_vault():
                     print(
                         "📰 Existing Vault Approle Credentials are not valid or has expired. Please obtain a new role or secret id from Vault UI:"
                     )
-                    print(f"💻 App Role ID: {vault_role_id}")
-                    print(f"💻 App Secret ID: {vault_secret_id}")
+                    print(f"💻 Existing Role ID: ...{vault_role_id[-4:]}")
+                    print(f"💻 Existing Secret ID: ...{vault_secret_id[-4:]}")
                     vault_role_id = prompt("⌨️ Enter Role ID: ", style=entry_style).strip()
                     vault_secret_id = prompt("⌨️ Enter Secret ID: ", style=entry_style).strip()
                     if is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):

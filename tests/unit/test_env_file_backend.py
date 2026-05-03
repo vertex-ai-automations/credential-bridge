@@ -36,7 +36,8 @@ def test_add_secret_writes_group_comment(backend, tmp_path):
 
 
 def test_add_secret_raises_if_key_exists(populated_backend):
-    with pytest.raises(EnvFileError, match="already exist"):
+    from credential_bridge.exceptions import EnvFileKeyExistsError
+    with pytest.raises(EnvFileKeyExistsError):
         populated_backend.add_secret("EXISTING", {"EXISTING": "new_value"})
 
 
@@ -111,3 +112,12 @@ def test_write_uses_tmp_file(backend, tmp_path, mocker):
     mocker.patch.object(Path, "write_text", track_write)
     backend.add_secret("KEY", {"KEY": "val"})
     assert any(".env.tmp" in p for p in written_paths)
+
+
+def test_add_secret_quotes_value_with_spaces(backend, tmp_path):
+    backend.add_secret("GREETING", {"GREETING": "hello world"})
+    content = (tmp_path / ".env").read_text()
+    assert 'GREETING="hello world"' in content
+    # Reading it back should return the unquoted value
+    result = backend.get_secret("GREETING")
+    assert result == {"GREETING": "hello world"}

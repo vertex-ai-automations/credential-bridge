@@ -5,8 +5,21 @@ from typing import Any, Dict, List, Optional, Union
 
 from dotenv import dotenv_values
 
-from ..exceptions import EnvFileError, EnvFileNotFoundError
+from ..exceptions import EnvFileError, EnvFileKeyExistsError, EnvFileNotFoundError
 from .base import BaseSecretBackend
+
+
+def _quote_value(value: str) -> str:
+    """Quote a .env value if it contains spaces, quotes, or special characters."""
+    # Already quoted
+    if (value.startswith('"') and value.endswith('"')) or \
+       (value.startswith("'") and value.endswith("'")):
+        return value
+    # Needs quoting
+    if any(c in value for c in (' ', '\t', '#', '"', "'", '\\', '$', '`')):
+        escaped = value.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
 
 
 class EnvFileBackend(BaseSecretBackend):
@@ -45,14 +58,14 @@ class EnvFileBackend(BaseSecretBackend):
         existing = self._current_keys()
         conflicts = [k for k in secret if k in existing]
         if conflicts:
-            raise EnvFileError(
+            raise EnvFileKeyExistsError(
                 f"Key(s) already exist in {self.path}: {conflicts}. "
                 "Use update_secret() to change them."
             )
         lines = self._read_lines()
         lines.append(f"\n# {name}\n")
         for k, v in secret.items():
-            lines.append(f"{k}={v}\n")
+            lines.append(f"{k}={_quote_value(str(v))}\n")
         self._write_lines(lines)
         if self.load_into_environ:
             self._sync_environ({k: str(v) for k, v in secret.items()})
@@ -78,7 +91,7 @@ class EnvFileBackend(BaseSecretBackend):
             if "=" in line and not line.strip().startswith("#"):
                 key = line.split("=", 1)[0].strip()
                 if key in secret:
-                    new_lines.append(f"{key}={secret[key]}\n")
+                    new_lines.append(f"{key}={_quote_value(str(secret[key]))}\n")
                     updated[key] = str(secret[key])
                     continue
             new_lines.append(line)
