@@ -106,7 +106,7 @@ cb keyring get database -s myapp -o json | jq '.host'
 
 | Situation | Message | Resolution |
 |---|---|---|
-| Key not found | `CredentialBridgeError` | Verify name and service with `cb keyring get` |
+| Key not found | `CredentialBridgeError` | Verify the key name and service name match exactly what was used when the secret was added. `cb keyring list` is not supported — use `cb keyring get <name>` if you know the key name. |
 | Backend unavailable (Linux) | `CredentialBridgeError` | Ensure a D-Bus Secret Service (e.g. `gnome-keyring`) is running |
 
 ---

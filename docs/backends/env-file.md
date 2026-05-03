@@ -154,7 +154,8 @@ cb env get API_KEY --path config/.env
 Performs a **partial update** — only the keys specified in `secret` are changed;
 all other lines in the file are preserved exactly as they are. Raises
 `EnvFileError` if **any** key in `secret` is missing from the file — use
-`add_secret()` first.
+`add_secret()` first. If the `.env` file does not exist, all specified keys are
+considered missing and `EnvFileError` is raised.
 
 ```python
 # Only DB_HOST is changed; DB_PORT and all other keys are untouched
@@ -206,9 +207,10 @@ All write operations (`add_secret`, `update_secret`, `delete_secret`) use a
 two-step atomic strategy to prevent file corruption if the process is interrupted
 mid-write:
 
-1. The new content is written to a temporary file named `.env.tmp` in the same
-   directory as the target file.
-2. `os.replace()` is called to atomically rename `.env.tmp` to `.env`.
+1. The new content is written to a temporary file with `.tmp` appended to the
+   target filename (e.g. `secrets.env` → `secrets.env.tmp`) in the same directory
+   as the target file.
+2. `os.replace()` is called to atomically rename the temp file back to the original filename.
 
 `os.replace()` is atomic on POSIX systems and atomic on NTFS on Windows (within
 the same volume), so a concurrent reader never sees a partial write.

@@ -10,6 +10,8 @@ run-wizard
 python -m credential_bridge wizard
 ```
 
+`run-wizard` is a console script entry point installed alongside `cb` — it launches the same interactive wizard.
+
 ## Welcome screen
 
 On launch the wizard renders a branded banner and drops into the main menu:

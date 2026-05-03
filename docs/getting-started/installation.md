@@ -23,7 +23,7 @@ pip install -e ".[dev]"
 
 ```bash
 pip install "credential-bridge[dev]"     # pytest, mypy, ruff
-pip install "credential-bridge[fastapi]" # FastAPI integration (planned)
+pip install "credential-bridge[docs]"    # documentation build dependencies
 ```
 
 ## Verify installation

@@ -35,7 +35,7 @@ export VAULT_TOKEN=s.your-token
 
 ## add
 
-Add a new secret. Fails if the secret path already exists.
+Add a secret. Creates a new KV-v2 version if the path already exists.
 
 ### Syntax
 
@@ -103,7 +103,6 @@ Enter secrets interactively. Leave KEY blank to finish.
 | Situation | Message | Resolution |
 |---|---|---|
 | Missing URL or credentials | `Configuration Error` | Set `VAULT_ADDR` and `VAULT_TOKEN` (or AppRole vars) |
-| Secret path already exists | `CredentialBridgeError` | Use `cb vault update` instead |
 | No key-value pairs provided | `Missing Input` | Pass at least one `--secret KEY=VALUE` |
 
 ---

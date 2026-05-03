@@ -16,11 +16,14 @@ pip install credential-bridge
     from credential_bridge import SecretsManager
 
     sm = SecretsManager("env", path=".env")
+    # "database" is a comment label; get_secret uses the actual key name
     sm.add_secret("database", {"DB_HOST": "localhost", "DB_PORT": "5432"})
 
-    result = sm.get_secret("DB_HOST")
+    result = sm.get_secret("DB_HOST")   # not sm.get_secret("database")
     print(result["DB_HOST"])  # localhost
     ```
+
+    Note: for `.env` files, `get_secret` takes the individual env var key (`DB_HOST`), not the group label (`database`) used in `add_secret`. See [.env File backend](../backends/env-file/) for details.
 
     Via CLI:
     ```bash

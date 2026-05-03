@@ -178,7 +178,7 @@ auto_title = true
 normalize_issue_symbols = true
 repo_url_shorthand = true
 user = "vertex-ai-automations"
-repo = "pylogshield"
+repo = "credential-bridge"
 
 [project.markdown_extensions.pymdownx.mark]
 [project.markdown_extensions.pymdownx.smartsymbols]

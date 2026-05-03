@@ -76,6 +76,8 @@ Enter secrets interactively. Leave KEY blank to finish.
 ✓  Secret database added to .env.
 ```
 
+Note: `.env` values are displayed as you type (not masked), as they are typically non-sensitive configuration values.
+
 !!! info "Key already exists"
     `add` raises `EnvFileKeyExistsError` if any supplied key already exists in the file. Use `update` to change an existing value.
 

@@ -35,6 +35,12 @@ local development workflows.
 | `logger` | `PyLogShield \| None` | `None` | Provide your own `PyLogShield` logger instance. |
 | `mask` | `bool` | `True` | Mask secret values in log output. |
 
+!!! warning "Default service name differs between library and CLI"
+    `KeyringBackend()` defaults `service_name` to `"default_service"`, but the CLI
+    (`cb keyring`) defaults `--service-name` to `"default"`. A secret written with one
+    using its default is invisible to the other. Always pass `service_name=` /
+    `--service-name` explicitly to ensure portability.
+
 ## JSON serialisation
 
 All secrets are stored as **JSON strings** in the keyring. When you call
