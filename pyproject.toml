@@ -49,8 +49,6 @@ fastapi = ["starlette>=0.27.0"]
 
 
 [tool.setuptools_scm]
-# Auto generate _version.py with the corresponding git tag
-version_file = "src/credential_bridge/_version.py"
 
 [tool.pytest.ini_options]
 markers = [
