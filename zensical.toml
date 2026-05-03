@@ -50,6 +50,7 @@ nav = [
 variant = "modern"
 language = "en"
 favicon = "img/favicon/favicon.ico"
+logo = "img/credential_bridge_192x192.png"
 
 features = [
   "announce.dismiss",
@@ -73,7 +74,6 @@ features = [
 ]
 
 [project.theme.icon]
-logo = "lucide/shield-check"
 repo = "fontawesome/brands/github"
 edit = "lucide/pencil"
 view = "lucide/eye"
