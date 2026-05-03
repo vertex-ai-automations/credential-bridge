@@ -1,40 +1,43 @@
 [build-system]
-requires = ["setuptools>=68", "wheel", "setuptools_scm"]
+requires = ["setuptools>=68", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "credential-bridge" 
-description = "Credential Bridge is a Python package that interact with HashiCorp Vault and Keyring, allowing for secure management of secrets."
+name = "credential-bridge"
+description = "A Python library for unified secrets management across HashiCorp Vault, system keyring, and .env files."
 authors = [
     {name = "Vertex AI Automations", email = "info@vertexaiautomations.com"}
 ]
 readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["vault", "hashicorp", "keyring", "credentials", "authentication", "secrets", "dotenv", "env-file", "secrets-management"]
+license = "MIT"
+license-files = ["LICENSE"]
 
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Logging",
+    "Topic :: System :: Systems Administration",
     "Typing :: Typed",
 ]
-requires-python = ">=3.8"
-keywords = ["vault", "keyring", "credentials", "authentications", "wizard", "secrets"]
 
-dynamic = ["version"]
-license = 'MIT'
-license-files = ['LICENSE']
+dynamic = ["version", "dependencies"]
 
 [project.urls]
-homepage = "https://www.vertexaiautomations.com"
-documentation = "https://vertex-ai-automations.github.io/credential-bridge"
-repository = 'https://github.com/vertex-ai-automations/credential-bridge'
-issues = "https://github.com/vertex-ai-automations/credential-bridge/issues/new"
+Homepage = "https://www.vertexaiautomations.com"
+Documentation = "https://vertex-ai-automations.github.io/credential-bridge"
+Repository = "https://github.com/vertex-ai-automations/credential-bridge"
+"Bug Tracker" = "https://github.com/vertex-ai-automations/credential-bridge/issues/new"
 
 [project.scripts]
 cb          = "credential_bridge.cli.main:main"
@@ -42,11 +45,15 @@ vault-cli   = "credential_bridge.cli.vault_cli:main"
 keyring-cli = "credential_bridge.cli.keyring_cli:main"
 run-wizard  = "credential_bridge.prompt_wizard:main"
 
-
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-mock>=3.0"]
-fastapi = ["starlette>=0.27.0"]
+fastapi = ["fastapi>=0.100", "starlette>=0.27.0"]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools_scm]
 version_file = "src/credential_bridge/_version.py"
@@ -55,4 +62,3 @@ version_file = "src/credential_bridge/_version.py"
 markers = [
     "integration: marks tests as integration tests (may require external services)",
 ]
-
