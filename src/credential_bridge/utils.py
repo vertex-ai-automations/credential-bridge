@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -31,12 +32,14 @@ def save_config(data: Dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
     else:
-        # Windows: NTFS ACLs require win32security; write normally and warn
+        # Windows: NTFS ACLs require win32security; write normally and warn the user
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
-        logger.warning(
-            "Config written to %s — consider restricting file permissions manually on Windows.",
-            CONFIG_FILE,
+        warnings.warn(
+            f"Vault config written to {CONFIG_FILE} without restricted permissions. "
+            "Consider restricting file access manually on Windows.",
+            UserWarning,
+            stacklevel=2,
         )
 
 
@@ -79,11 +82,14 @@ def get_session(
     Returns:
         Configured requests.Session instance
     """
-    logger.info(f"Session created: Cert: {cert}, Proxies: {proxies}")
     session = requests.Session()
     session.trust_env = False
-    session.verify = cert if cert else True   # True = use system CA bundle
+    session.verify = cert if cert else True
     session.proxies = proxies or {}
+    if cert:
+        logger.debug("Session created with custom cert: %s", cert)
+    if proxies:
+        logger.debug("Session created with proxies configured (%d entries)", len(proxies))
     return session
 
 

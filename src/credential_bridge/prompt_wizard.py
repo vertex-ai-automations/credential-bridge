@@ -1,7 +1,6 @@
 # import subprocess
 import sys
 
-import hvac
 from prompt_toolkit import print_formatted_text, prompt
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
@@ -18,28 +17,28 @@ entry_style = Style.from_dict({"prompt": "fg:ansibrightgreen bold"})
 
 
 def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None):
+    """Validate Vault credentials by attempting authentication through VaultBackend."""
     import os
     vault_addr = os.environ.get("VAULT_ADDR", "")
     if not vault_addr:
         print("❌ VAULT_ADDR environment variable not set.")
         return False
-    if vault_token:
-        try:
-            client = hvac.Client(url=vault_addr, token=vault_token, verify=True)
-            return client.is_authenticated()
-        except Exception as e:
-            print(f"❌ Error validating vault token: {e}")
+    try:
+        from .manager import SecretsManager
+        kwargs: dict = {"vault_url": vault_addr}
+        if vault_token:
+            kwargs["vault_token"] = vault_token
+        elif role_id and secret_id:
+            kwargs["vault_role_id"] = role_id
+            kwargs["vault_secret_id"] = secret_id
+        else:
+            print("❌ No credentials provided.")
             return False
-    elif role_id and secret_id:
-        try:
-            client = hvac.Client(url=vault_addr, verify=True)
-            client.auth.approle.login(role_id=role_id, secret_id=secret_id)
-            return client.is_authenticated()
-        except Exception as e:
-            print(f"❌ Error validating approle creds: {e}")
-            return False
-    print("❌ No vault token or approle credential provided.")
-    return False
+        SecretsManager("vault", **kwargs)
+        return True
+    except Exception as e:
+        print(f"❌ Authentication failed: {e}")
+        return False
 
 
 def main():
@@ -227,7 +226,8 @@ def configure_vault():
                 print(f"ℹ️ Invalid selection: {action}. Please try again❗")
                 continue
 
-            service_name = prompt("⌨️ Enter Service Name: ", style=entry_style).strip()
+            service_name = prompt("⌨️ Enter Service Name (tag): ", style=entry_style).strip()
+            secret_path = prompt("⌨️ Enter Secret Path (e.g. myapp/database): ", style=entry_style).strip()
 
             secret_data = {}
             versions = None
@@ -249,16 +249,6 @@ def configure_vault():
                     secret_value = prompt("⌨️ Enter Secret Value: ", style=entry_style).strip()
                     secret_data[secret_name] = secret_value
 
-            if action in [
-                "list",
-                "get-config",
-                "read-metadata",
-                "delete-versions",
-                "undelete-versions",
-                "destroy-versions",
-            ]:
-                ...
-
             if action in ["delete-versions", "undelete-versions", "destroy-versions"]:
                 versions = []
                 while True:
@@ -275,7 +265,7 @@ def configure_vault():
                     except ValueError:
                         print("ℹ️ Invalid input. Please enter numeric values for versions.")
 
-            run_vault_cli(action, service_name, secret_data, versions)
+            run_vault_cli(action, service_name, secret_path, secret_data, versions)
 
 
 def configure_env():
@@ -335,34 +325,39 @@ def run_keyring_cli(action, service_name, name, secret):
         print(f"❌ Error: {e}")
 
 
-def run_vault_cli(action, service_name, secret_data, versions=None):
+def run_vault_cli(action, service_name, secret_path, secret_data, versions=None):
     from .manager import SecretsManager
     manager = SecretsManager("vault", service_name=service_name)
     try:
         if action == "add":
-            manager.add_secret(service_name, secret_data)
+            manager.add_secret(secret_path, secret_data)
+            print(f"👍 Added: {secret_path}")
         elif action == "get":
-            result = manager.get_secret(service_name)
-            print(f"👍 {service_name}: {result}")
+            result = manager.get_secret(secret_path)
+            print(f"👍 {secret_path}: {result}")
         elif action == "update":
-            manager.update_secret(service_name, secret_data)
+            manager.update_secret(secret_path, secret_data)
+            print(f"👍 Updated: {secret_path}")
         elif action == "delete":
-            manager.delete_secret(service_name)
+            manager.delete_secret(secret_path)
+            print(f"👍 Deleted: {secret_path}")
         elif action == "list":
-            keys = manager.list_secrets(service_name)
+            keys = manager.list_secrets(secret_path)
             print(f"👍 Keys: {keys}")
         elif action in ("read-metadata", "delete-versions", "undelete-versions", "destroy-versions", "get-config"):
-            # These are Vault-specific — access underlying backend directly
             vault_backend = manager.backend
             if action == "read-metadata":
-                meta = vault_backend.read_secret_metadata(service_name)
+                meta = vault_backend.read_secret_metadata(secret_path)
                 print(f"👍 Metadata: {meta}")
             elif action == "delete-versions":
-                vault_backend.delete_secret_versions(service_name, versions)
+                vault_backend.delete_secret_versions(secret_path, versions)
+                print(f"👍 Deleted versions {versions} of {secret_path}")
             elif action == "undelete-versions":
-                vault_backend.undelete_secret_versions(service_name, versions)
+                vault_backend.undelete_secret_versions(secret_path, versions)
+                print(f"👍 Undeleted versions {versions} of {secret_path}")
             elif action == "destroy-versions":
-                vault_backend.destroy_secret_versions(service_name, versions)
+                vault_backend.destroy_secret_versions(secret_path, versions)
+                print(f"👍 Destroyed versions {versions} of {secret_path}")
             elif action == "get-config":
                 cfg = vault_backend.get_config()
                 print(f"👍 Config: {cfg}")
