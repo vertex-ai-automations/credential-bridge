@@ -41,3 +41,7 @@ def test_env_file_error_is_backend_error():
 def test_env_file_key_exists_error_is_env_file_error():
     from credential_bridge.exceptions import EnvFileKeyExistsError, EnvFileError
     assert issubclass(EnvFileKeyExistsError, EnvFileError)
+
+def test_vault_secret_not_found_is_vault_error():
+    from credential_bridge.exceptions import VaultSecretNotFoundError, VaultError
+    assert issubclass(VaultSecretNotFoundError, VaultError)

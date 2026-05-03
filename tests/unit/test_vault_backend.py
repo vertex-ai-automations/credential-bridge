@@ -11,6 +11,8 @@ from credential_bridge.exceptions import (
 def mock_hvac(mocker):
     client = MagicMock()
     client.is_authenticated.return_value = True
+    # Return a high TTL so _refresh_token_if_needed skips renewal
+    client.auth.token.lookup_self.return_value = {"data": {"ttl": 3600}}
     mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
     mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
     mocker.patch("credential_bridge.backends.vault.save_config")
@@ -113,6 +115,7 @@ def test_approle_authentication_success(mocker):
     client.auth.approle.login.return_value = {
         "auth": {"client_token": "s.approle-token"}
     }
+    client.auth.token.lookup_self.return_value = {"data": {"ttl": 3600}}
     mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
     mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
     mocker.patch("credential_bridge.backends.vault.save_config")
@@ -189,6 +192,30 @@ def test_refresh_token_swallows_exception(mock_hvac):
 # ---------------------------------------------------------------------------
 # 2d: persist parameter
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 2e: VaultSecretNotFoundError
+# ---------------------------------------------------------------------------
+
+def test_get_secret_raises_vault_secret_not_found(mock_hvac):
+    """InvalidPath from hvac should raise VaultSecretNotFoundError."""
+    import hvac.exceptions
+    from credential_bridge.exceptions import VaultSecretNotFoundError
+    mock_hvac.secrets.kv.v2.read_secret.side_effect = hvac.exceptions.InvalidPath("secret/myapp/missing")
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    with pytest.raises(VaultSecretNotFoundError, match="does not exist"):
+        backend.get_secret("myapp/missing")
+
+
+def test_delete_secret_raises_vault_secret_not_found(mock_hvac):
+    """InvalidPath from hvac on delete should raise VaultSecretNotFoundError."""
+    import hvac.exceptions
+    from credential_bridge.exceptions import VaultSecretNotFoundError
+    mock_hvac.secrets.kv.v2.delete_metadata_and_all_versions.side_effect = hvac.exceptions.InvalidPath()
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    with pytest.raises(VaultSecretNotFoundError):
+        backend.delete_secret("myapp/missing")
+
 
 def test_credentials_not_persisted_by_default(mocker):
     """With persist=False (default), save_config should not be called."""

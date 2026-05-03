@@ -140,7 +140,7 @@ def test_env_full_crud(tmp_path):
 
     # Delete
     backend.delete_secret("DB_HOST")
-    with pytest.raises(Exception):
+    with pytest.raises(EnvFileNotFoundError):
         backend.get_secret("DB_HOST")
 
 

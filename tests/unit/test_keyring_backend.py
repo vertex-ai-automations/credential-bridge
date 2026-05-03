@@ -83,3 +83,19 @@ def test_update_secret_success(mocker, mock_logger):
     backend = KeyringBackend(service_name="svc")
     backend.update_secret("mykey", {"user": "newadmin"})
     mock_set.assert_called_once_with("svc", "mykey", json.dumps({"user": "newadmin"}))
+
+
+def test_add_secret_raises_if_key_already_exists(mocker, mock_logger):
+    """add_secret raises KeyringError if key already exists."""
+    stored = json.dumps({"user": "admin"})
+    mocker.patch("credential_bridge.backends.keyring.keyring.get_password", return_value=stored)
+    backend = KeyringBackend(service_name="svc")
+    with pytest.raises(KeyringError, match="already exists"):
+        backend.add_secret("mykey", {"user": "new"})
+
+
+def test_list_secrets_raises_keyring_error(mocker, mock_logger):
+    """list_secrets raises KeyringError (not NotImplementedError)."""
+    backend = KeyringBackend(service_name="svc")
+    with pytest.raises(KeyringError, match="not supported"):
+        backend.list_secrets()
