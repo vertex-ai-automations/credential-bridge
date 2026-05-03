@@ -72,7 +72,7 @@ def test_delete_secret_raises_if_not_found(mocker, mock_logger):
 
 def test_list_secrets_raises_not_implemented(mocker, mock_logger):
     backend = KeyringBackend(service_name="svc")
-    with pytest.raises(NotImplementedError, match="not supported"):
+    with pytest.raises(KeyringError, match="not supported"):
         backend.list_secrets()
 
 

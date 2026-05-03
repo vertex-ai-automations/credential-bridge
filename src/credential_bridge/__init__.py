@@ -13,6 +13,7 @@ from .exceptions import (
     VaultAuthError,
     VaultConnectionError,
     VaultError,
+    VaultSecretNotFoundError,
 )
 from .manager import SecretsManager
 
@@ -32,6 +33,7 @@ __all__ = [
     "VaultError",
     "VaultAuthError",
     "VaultConnectionError",
+    "VaultSecretNotFoundError",
     "KeyringError",
     "EnvFileError",
     "EnvFileKeyExistsError",

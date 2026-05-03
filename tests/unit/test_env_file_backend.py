@@ -69,7 +69,7 @@ def test_update_secret_is_partial(tmp_path):
 
 
 def test_update_secret_raises_if_no_key_exists(backend):
-    with pytest.raises(EnvFileError, match="exist"):
+    with pytest.raises(EnvFileError, match="not found"):
         backend.update_secret("MISSING", {"MISSING": "val"})
 
 

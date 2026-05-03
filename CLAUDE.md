@@ -66,12 +66,13 @@ src/credential_bridge/
 CredentialBridgeError
 ├── BackendError
 │   ├── VaultError
-│   │   ├── VaultAuthError       — bad token / AppRole
-│   │   └── VaultConnectionError — unreachable server
+│   │   ├── VaultAuthError          — bad token / AppRole
+│   │   ├── VaultConnectionError    — unreachable server
+│   │   └── VaultSecretNotFoundError — secret path does not exist
 │   ├── KeyringError
 │   └── EnvFileError
-│       ├── EnvFileNotFoundError  — key not found
-│       └── EnvFileKeyExistsError — add_secret called on existing key
+│       ├── EnvFileNotFoundError    — key not found
+│       └── EnvFileKeyExistsError   — add_secret on existing key
 ├── BackendNotRegisteredError
 └── ConfigurationError
 ```

@@ -13,6 +13,7 @@ from credential_bridge.exceptions import (
     VaultAuthError,
     VaultConnectionError,
     VaultError,
+    VaultSecretNotFoundError,
 )
 from credential_bridge.utils import get_session, load_config, save_config
 
@@ -160,14 +161,14 @@ class VaultBackend(BaseSecretBackend):
     def _refresh_token_if_needed(self) -> None:
         """Renew the Vault token if its TTL is below 5 minutes."""
         try:
-            lookup = self.client.auth.token.lookup_self()
-            ttl = lookup["data"]["ttl"]
-            if ttl < 300:
-                self.logger.info("Vault token TTL low, renewing...")
+            resp = self.client.auth.token.lookup_self()
+            if resp["data"]["ttl"] < 300:
                 self.client.auth.token.renew_self(increment="0")
-                self.logger.info("Vault token renewed.")
-        except Exception as exc:
-            self.logger.warning(f"Could not refresh Vault token: {exc}")
+                self.logger.info("Vault token refreshed.")
+        except hvac.exceptions.Forbidden as e:
+            raise VaultAuthError(f"Vault token is invalid or has expired: {e}") from e
+        except Exception as e:
+            self.logger.warning(f"Token refresh check failed (will retry on next operation): {e}")
 
     # ------------------------------------------------------------------
     # BaseSecretBackend interface
@@ -195,6 +196,8 @@ class VaultBackend(BaseSecretBackend):
                 mount_point=self.mount_point,
             )
             return response["data"]["data"]
+        except hvac.exceptions.InvalidPath as e:
+            raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
         except Exception as exc:
             raise VaultError(f"Failed to get secret '{name}': {exc}") from exc
 
@@ -208,6 +211,8 @@ class VaultBackend(BaseSecretBackend):
                 mount_point=self.mount_point,
             )
             self.logger.info(f"Secret updated: {name}")
+        except hvac.exceptions.InvalidPath as e:
+            raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
         except Exception as exc:
             raise VaultError(f"Failed to update secret '{name}': {exc}") from exc
 
@@ -220,6 +225,8 @@ class VaultBackend(BaseSecretBackend):
                 mount_point=self.mount_point,
             )
             self.logger.info(f"Secret deleted: {name}")
+        except hvac.exceptions.InvalidPath as e:
+            raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
         except Exception as exc:
             raise VaultError(f"Failed to delete secret '{name}': {exc}") from exc
 

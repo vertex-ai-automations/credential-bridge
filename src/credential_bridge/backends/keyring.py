@@ -34,8 +34,16 @@ class KeyringBackend(BaseSecretBackend):
 
     def add_secret(self, name: str, secret: Dict[str, Any]) -> None:
         try:
+            existing = keyring.get_password(self.service_name, name)
+            if existing is not None:
+                raise KeyringError(
+                    f"Secret '{name}' already exists in keyring service '{self.service_name}'. "
+                    "Use update_secret() to change it."
+                )
             keyring.set_password(self.service_name, name, json.dumps(secret))
             self.logger.info(f"Keyring secret added: {name}", mask=self.mask)
+        except KeyringError:
+            raise
         except _KeyringLibError as e:
             raise KeyringError(f"Failed to add '{name}': {e}") from e
 
@@ -81,7 +89,7 @@ class KeyringBackend(BaseSecretBackend):
             raise KeyringError(f"Failed to delete '{name}': {e}") from e
 
     def list_secrets(self, path: str = "") -> List[str]:
-        raise NotImplementedError(
+        raise KeyringError(
             "KeyringBackend.list_secrets() is not supported on this platform. "
             "Windows Credential Manager and macOS Keychain do not expose enumeration APIs."
         )

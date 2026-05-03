@@ -10,12 +10,13 @@ from .base import BaseSecretBackend
 
 
 def _quote_value(value: str) -> str:
-    """Quote a .env value if it contains spaces, quotes, or special characters."""
-    # Already quoted
-    if (value.startswith('"') and value.endswith('"')) or \
-       (value.startswith("'") and value.endswith("'")):
-        return value
-    # Needs quoting
+    """Quote a .env value if it contains spaces or special characters."""
+    # Already properly quoted — both open and close with same quote char
+    if len(value) >= 2:
+        if (value[0] == '"' and value[-1] == '"') or \
+           (value[0] == "'" and value[-1] == "'"):
+            return value
+    # Needs quoting if contains spaces or special chars
     if any(c in value for c in (' ', '\t', '#', '"', "'", '\\', '$', '`')):
         escaped = value.replace('\\', '\\\\').replace('"', '\\"')
         return f'"{escaped}"'
@@ -33,7 +34,7 @@ class EnvFileBackend(BaseSecretBackend):
         load_into_environ: bool = False,
         encoding: str = "utf-8",
     ) -> None:
-        self.path = Path(path)
+        self.path = Path(path).resolve()
         self.load_into_environ = load_into_environ
         self.encoding = encoding
 
@@ -78,11 +79,10 @@ class EnvFileBackend(BaseSecretBackend):
 
     def update_secret(self, name: str, secret: Dict[str, Any]) -> None:
         existing = self._current_keys()
-        found = {k for k in secret if k in existing}
-        if not found:
+        missing = [k for k in secret if k not in existing]
+        if missing:
             raise EnvFileError(
-                f"None of the specified keys {list(secret)} exist in {self.path}. "
-                "Use add_secret() first."
+                f"Key(s) {missing} not found in {self.path}. Use add_secret() first."
             )
         lines = self._read_lines()
         updated: Dict[str, str] = {}

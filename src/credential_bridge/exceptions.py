@@ -21,6 +21,10 @@ class VaultConnectionError(VaultError):
     """Cannot reach Vault — bad URL or network issue."""
 
 
+class VaultSecretNotFoundError(VaultError):
+    """A requested secret path does not exist in Vault."""
+
+
 class KeyringError(BackendError):
     """System keyring error."""
 
