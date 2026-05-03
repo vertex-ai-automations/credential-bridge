@@ -92,6 +92,10 @@ scheme = "default"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to dark mode"
 
+# ── Extra ────────────────────────────────────────────────────────────────────
+[project.extra]
+generator = false
+
 # ── Social links ─────────────────────────────────────────────────────────────
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
