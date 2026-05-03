@@ -270,7 +270,7 @@ def configure_vault() -> None:
                     continue
             else:
                 if not is_vault_cred_valid(vault_token=vault_token):
-                    _info(f"Existing token (...{vault_token[-4:]}) has expired.")
+                    _info("Existing Vault token has expired or is invalid. Please enter a new one.")
                     vault_token = _prompt(
                         "<b><ansibrightgreen>  New Vault Token:</ansibrightgreen></b>  ",
                         is_password=True,
@@ -302,9 +302,7 @@ def configure_vault() -> None:
                     continue
             else:
                 if not is_vault_cred_valid(role_id=vault_role_id, secret_id=vault_secret_id):
-                    _info(
-                        f"Existing AppRole (...{vault_role_id[-4:]}) has expired."
-                    )
+                    _info("Existing AppRole credentials have expired or are invalid. Please enter new ones.")
                     vault_role_id = _prompt(
                         "<b><ansibrightgreen>  New Role ID:</ansibrightgreen></b>    ",
                         is_password=True,
@@ -327,14 +325,26 @@ def configure_vault() -> None:
 
 
 def _save_vault_token(token: str) -> None:
+    import os
     cfg = load_config()
-    cfg.update({"vault_token": token, "vault_role_id": None, "vault_secret_id": None})
+    cfg.update({
+        "vault_token": token,
+        "vault_role_id": None,
+        "vault_secret_id": None,
+        "vault_addr": os.environ.get("VAULT_ADDR", ""),
+    })
     save_config(cfg)
 
 
 def _save_vault_approle(role_id: str, secret_id: str) -> None:
+    import os
     cfg = load_config()
-    cfg.update({"vault_role_id": role_id, "vault_secret_id": secret_id, "vault_token": None})
+    cfg.update({
+        "vault_role_id": role_id,
+        "vault_secret_id": secret_id,
+        "vault_token": None,
+        "vault_addr": os.environ.get("VAULT_ADDR", ""),
+    })
     save_config(cfg)
 
 
@@ -500,8 +510,10 @@ def run_vault_cli(
     secret_data: dict,
     versions=None,
 ) -> None:
+    import os
     from .manager import SecretsManager
-    manager = SecretsManager("vault", service_name=service_name)
+    vault_url = os.environ.get("VAULT_ADDR") or load_config().get("vault_addr")
+    manager = SecretsManager("vault", service_name=service_name, vault_url=vault_url)
     try:
         if action == "add":
             manager.add_secret(secret_path, secret_data)

@@ -163,7 +163,7 @@ class VaultBackend(BaseSecretBackend):
         try:
             resp = self.client.auth.token.lookup_self()
             if resp["data"]["ttl"] < 300:
-                self.client.auth.token.renew_self(increment="0")
+                self.client.auth.token.renew_self()
                 self.logger.info("Vault token refreshed.")
         except hvac.exceptions.Forbidden as e:
             raise VaultAuthError(f"Vault token is invalid or has expired: {e}") from e

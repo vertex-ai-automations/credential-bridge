@@ -170,7 +170,7 @@ def test_refresh_token_renews_when_ttl_low(mock_hvac):
     mock_hvac.auth.token.lookup_self.return_value = {"data": {"ttl": 100}}
     backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
     backend._refresh_token_if_needed()
-    mock_hvac.auth.token.renew_self.assert_called_once_with(increment="0")
+    mock_hvac.auth.token.renew_self.assert_called_once_with()
 
 
 def test_refresh_token_skips_when_ttl_ok(mock_hvac):
