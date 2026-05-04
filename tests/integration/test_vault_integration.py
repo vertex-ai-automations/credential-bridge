@@ -16,6 +16,8 @@ def test_vault_add_and_get_roundtrip():
     from credential_bridge.backends.vault import VaultBackend
     backend = VaultBackend(vault_url=VAULT_ADDR, vault_token=VAULT_TOKEN)
     backend.add_secret("ci/test", {"ci_key": "ci_value"})
-    result = backend.get_secret("ci/test")
-    assert result["ci_key"] == "ci_value"
-    backend.delete_secret("ci/test")
+    try:
+        result = backend.get_secret("ci/test")
+        assert result["ci_key"] == "ci_value"
+    finally:
+        backend.delete_secret("ci/test")

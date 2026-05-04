@@ -15,13 +15,6 @@ class FakeBackend(BaseSecretBackend):
     def list_secrets(self, path=""): return ["a", "b"]
 
 
-@pytest.fixture(autouse=True)
-def clean_registry():
-    original = dict(SecretsManager._registry)
-    yield
-    SecretsManager._registry = original
-
-
 def test_register_and_use_custom_backend():
     SecretsManager.register_backend("fake", FakeBackend)
     sm = SecretsManager("fake")

@@ -37,6 +37,18 @@ def _make_backend(vault_url, vault_token, role_id, secret_id, service_name, moun
         raise typer.Exit(1)
 
 
+def _parse_secrets(pairs: List[str]) -> dict:
+    """Convert KEY=value strings to a dict, raising a clean error on malformed input."""
+    result = {}
+    for s in pairs:
+        if "=" not in s:
+            print_error(f"Invalid secret format '{s}' — expected KEY=value.", title="Bad Input")
+            raise typer.Exit(1)
+        k, v = s.split("=", 1)
+        result[k] = v
+    return result
+
+
 def _prompt_secrets_interactive() -> List[str]:
     """Interactively prompt for KEY=value pairs when --secret is omitted."""
     secrets = []
@@ -68,7 +80,7 @@ def add(
         print_error("At least one KEY=value pair is required.", title="Missing Input")
         raise typer.Exit(1)
     backend = _make_backend(vault_url, vault_token, role_id, secret_id, service_name, mount_point)
-    secret_dict = dict(s.split("=", 1) for s in secret)
+    secret_dict = _parse_secrets(secret)
     try:
         backend.add_secret(name, secret_dict)
         print_success(f"Secret [bold]{name}[/bold] added.")
@@ -123,7 +135,7 @@ def update(
         print_error("At least one KEY=value pair is required.", title="Missing Input")
         raise typer.Exit(1)
     backend = _make_backend(vault_url, vault_token, role_id, secret_id, service_name, mount_point)
-    secret_dict = dict(s.split("=", 1) for s in secret)
+    secret_dict = _parse_secrets(secret)
     try:
         backend.update_secret(name, secret_dict)
         print_success(f"Secret [bold]{name}[/bold] updated.")

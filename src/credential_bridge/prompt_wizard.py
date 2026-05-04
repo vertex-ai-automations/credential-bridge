@@ -320,7 +320,7 @@ def configure_vault() -> None:
                 else:
                     _success("Existing AppRole credentials are valid.")
 
-        _vault_action_loop(auth_type)
+        _vault_action_loop(auth_type, vault_token=vault_token, vault_role_id=vault_role_id, vault_secret_id=vault_secret_id)
         return
 
 
@@ -348,7 +348,7 @@ def _save_vault_approle(role_id: str, secret_id: str) -> None:
     save_config(cfg)
 
 
-def _vault_action_loop(auth_label: str) -> None:
+def _vault_action_loop(auth_label: str, vault_token=None, vault_role_id=None, vault_secret_id=None) -> None:
     _VAULT_ACTIONS = [
         "add", "update", "delete", "get", "list",
         "read-metadata", "delete-versions", "undelete-versions",
@@ -417,7 +417,8 @@ def _vault_action_loop(auth_label: str) -> None:
                 except ValueError:
                     _error("Please enter numeric values for versions.")
 
-        run_vault_cli(action, service_name, secret_path, secret_data, versions)
+        run_vault_cli(action, service_name, secret_path, secret_data, versions,
+                      vault_token=vault_token, vault_role_id=vault_role_id, vault_secret_id=vault_secret_id)
         console.print()
 
 
@@ -509,11 +510,21 @@ def run_vault_cli(
     secret_path: str,
     secret_data: dict,
     versions=None,
+    vault_token=None,
+    vault_role_id=None,
+    vault_secret_id=None,
 ) -> None:
     import os
     from .manager import SecretsManager
     vault_url = os.environ.get("VAULT_ADDR") or load_config().get("vault_addr")
-    manager = SecretsManager("vault", service_name=service_name, vault_url=vault_url)
+    manager = SecretsManager(
+        "vault",
+        service_name=service_name,
+        vault_url=vault_url,
+        vault_token=vault_token,
+        vault_role_id=vault_role_id,
+        vault_secret_id=vault_secret_id,
+    )
     try:
         if action == "add":
             manager.add_secret(secret_path, secret_data)

@@ -111,12 +111,13 @@ class VaultBackend(BaseSecretBackend):
         """Authenticate with Vault using a token or AppRole credentials."""
         self.logger.info("Authenticating with Vault...")
         try:
+            tls_verify = self.cert if self.cert is not None else True
             if self.vault_token:
                 client = hvac.Client(
                     url=self.vault_addr,
                     token=self.vault_token,
                     session=self.session,
-                    verify=self.cert,
+                    verify=tls_verify,
                 )
                 if not client.is_authenticated():
                     raise VaultAuthError(
@@ -129,7 +130,7 @@ class VaultBackend(BaseSecretBackend):
             client = hvac.Client(
                 url=self.vault_addr,
                 session=self.session,
-                verify=self.cert,
+                verify=tls_verify,
             )
             auth_response = client.auth.approle.login(
                 role_id=self.vault_role_id,
@@ -159,14 +160,18 @@ class VaultBackend(BaseSecretBackend):
             raise VaultError(f"Vault authentication error: {exc}") from exc
 
     def _refresh_token_if_needed(self) -> None:
-        """Renew the Vault token if its TTL is below 5 minutes."""
+        """Renew the Vault token if its TTL is below 5 minutes; re-auth for expired AppRole tokens."""
         try:
             resp = self.client.auth.token.lookup_self()
             if resp["data"]["ttl"] < 300:
                 self.client.auth.token.renew_self()
                 self.logger.info("Vault token refreshed.")
         except hvac.exceptions.Forbidden as e:
-            raise VaultAuthError(f"Vault token is invalid or has expired: {e}") from e
+            if self.vault_role_id and self.vault_secret_id:
+                self.logger.info("AppRole token expired, re-authenticating...")
+                self.client = self._authenticate()
+            else:
+                raise VaultAuthError(f"Vault token is invalid or has expired: {e}") from e
         except Exception as e:
             self.logger.warning(f"Token refresh check failed (will retry on next operation): {e}")
 

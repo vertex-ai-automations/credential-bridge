@@ -54,7 +54,12 @@ class KeyringBackend(BaseSecretBackend):
                 raise KeyringError(
                     f"Secret '{name}' not found in keyring service '{self.service_name}'."
                 )
-            return json.loads(value)
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError as e:
+                raise KeyringError(
+                    f"Secret '{name}' in service '{self.service_name}' contains invalid JSON: {e}"
+                ) from e
         except KeyringError:
             raise
         except _KeyringLibError as e:

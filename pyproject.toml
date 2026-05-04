@@ -49,6 +49,9 @@ run-wizard  = "credential_bridge.prompt_wizard:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+credential_bridge = ["welcome_banner.txt"]
+
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 optional-dependencies.dev = {file = ["requirements-dev.txt"]}

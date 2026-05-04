@@ -15,6 +15,17 @@ _pt_style = PtStyle.from_dict({"prompt": "fg:ansibrightgreen bold"})
 _PATH = typer.Option(".env", "--path", "-p", help="Path to the .env file (default: .env in CWD)")
 
 
+def _parse_secrets(pairs: List[str]) -> dict:
+    result = {}
+    for s in pairs:
+        if "=" not in s:
+            print_error(f"Invalid secret format '{s}' — expected KEY=value.", title="Bad Input")
+            raise typer.Exit(1)
+        k, v = s.split("=", 1)
+        result[k] = v
+    return result
+
+
 def _prompt_secrets_interactive() -> List[str]:
     secrets = []
     from ._output import console
@@ -41,7 +52,7 @@ def add(
         print_error("At least one KEY=value pair is required.", title="Missing Input")
         raise typer.Exit(1)
     backend = EnvFileBackend(path=path)
-    secret_dict = dict(s.split("=", 1) for s in secret)
+    secret_dict = _parse_secrets(secret)
     try:
         backend.add_secret(name, secret_dict)
         print_success(f"Secret [bold]{name}[/bold] added to [dim]{path}[/dim].")
@@ -83,7 +94,7 @@ def update(
         print_error("At least one KEY=value pair is required.", title="Missing Input")
         raise typer.Exit(1)
     backend = EnvFileBackend(path=path)
-    secret_dict = dict(s.split("=", 1) for s in secret)
+    secret_dict = _parse_secrets(secret)
     try:
         backend.update_secret(name, secret_dict)
         print_success(f"[bold]{name}[/bold] updated in [dim]{path}[/dim].")
