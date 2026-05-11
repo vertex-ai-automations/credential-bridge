@@ -28,8 +28,11 @@ zensical serve
 # Build docs
 zensical build
 
-# Lint
+# Lint (check only)
 ruff check src/
+
+# Lint with auto-fix
+ruff check src/ --fix
 
 # Type check
 mypy src/
@@ -60,7 +63,7 @@ src/credential_bridge/
 
 **Key design decisions:**
 - `BaseSecretBackend` enforces `backend_name` via `__init_subclass__` — forgetting to set it raises `TypeError` at class definition time.
-- `SecretsManager._registry` is a class-level dict. `register_backend("name", MyBackend)` is how third-party backends plug in. Tests must use a `clean_registry` autouse fixture to isolate state.
+- `SecretsManager._registry` is a class-level dict. Built-in registered names: `"vault"` → `VaultBackend`, `"keyring"` → `KeyringBackend`, `"env"` → `EnvFileBackend`. `register_backend("name", MyBackend)` is how third-party backends plug in. Tests must use a `clean_registry` autouse fixture to isolate state.
 - `VaultBackend` URL resolution: `vault_url` arg → `VAULT_ADDR` env var → `~/.vault_config.json` → `ConfigurationError`.
 - `VaultBackend.__init__` resolves and validates `vault_url`/`VAULT_ADDR`/config **first**, before any other setup (fail-fast). `mount_point` defaults to `getpass.getuser()` via the cross-platform `_safe_getuser()` helper (catches `ModuleNotFoundError` from the missing `pwd` module on Windows).
 - `VaultBackend(persist=False)` is the default — credentials are NOT written to `~/.vault_config.json` unless `persist=True` is explicitly passed.
@@ -94,10 +97,26 @@ CredentialBridgeError
 └── ConfigurationError
 ```
 
+## Running the Package Directly
+
+`python -m credential_bridge` invokes the `cb` CLI (via `src/credential_bridge/__main__.py`).
+`python -m credential_bridge.cli` also works.
+
 ## Backwards Compatibility
 
 `VaultManager` and `KeyringManager` are aliases for `VaultBackend` and `KeyringBackend` in `__init__.py`. Existing code using the old names continues to work.
 
+## Releasing
+
+Push a bare SemVer tag to trigger the CI publish job (TestPyPI → PyPI):
+
+```bash
+git tag 1.2.1
+git push origin 1.2.1
+```
+
+Push to `main` (without a tag) deploys docs only. The tag format must be `X.Y.Z` (no `v` prefix).
+
 ## Docs
 
-MkDocs + Material theme. Content at `docs/`. API reference pages in `docs/reference/` are auto-generated from numpy-style docstrings via `mkdocstrings`. Keep docstrings in numpy format when adding or modifying public methods.
+Zensical (wraps MkDocs + Material theme). Config is `zensical.toml`. Content at `docs/`. API reference pages in `docs/reference/` are auto-generated from numpy-style docstrings via `mkdocstrings`. Keep docstrings in numpy format when adding or modifying public methods.

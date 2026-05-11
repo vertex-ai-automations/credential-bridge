@@ -1,4 +1,5 @@
 # src/credential_bridge/cli/keyring_cli.py
+import json
 from typing import List, Optional
 
 import typer
@@ -45,8 +46,7 @@ def get(
     try:
         result = backend.get_secret(name)
         if output == "json":
-            import json as _json
-            typer.echo(_json.dumps(result))
+            typer.echo(json.dumps(result))
         else:
             print_result(result, title=name)
     except CredentialBridgeError as e:

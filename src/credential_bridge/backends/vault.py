@@ -8,15 +8,15 @@ import hvac
 import requests
 from pylogshield import LogLevel, PyLogShield, get_logger
 
-from credential_bridge.backends.base import BaseSecretBackend
-from credential_bridge.exceptions import (
+from .base import BaseSecretBackend
+from ..exceptions import (
     ConfigurationError,
     VaultAuthError,
     VaultConnectionError,
     VaultError,
     VaultSecretNotFoundError,
 )
-from credential_bridge.utils import get_session, load_config, save_config
+from ..utils import get_session, load_config, save_config
 
 
 def _safe_getuser() -> str:
@@ -28,7 +28,7 @@ def _safe_getuser() -> str:
     """
     try:
         return getpass.getuser()
-    except Exception:
+    except (ModuleNotFoundError, KeyError, OSError):
         return (
             os.environ.get("USERNAME")
             or os.environ.get("USER")
@@ -219,6 +219,10 @@ class VaultBackend(BaseSecretBackend):
                 mount_point=self.mount_point,
             )
             self.logger.info(f"Secret added: {name}")
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
+        except (ConnectionError, OSError) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:
             raise VaultError(f"Failed to add secret '{name}': {exc}") from exc
 
@@ -233,6 +237,10 @@ class VaultBackend(BaseSecretBackend):
             return response["data"]["data"]
         except hvac.exceptions.InvalidPath as e:
             raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
+        except (ConnectionError, OSError) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:
             raise VaultError(f"Failed to get secret '{name}': {exc}") from exc
 
@@ -248,6 +256,10 @@ class VaultBackend(BaseSecretBackend):
             self.logger.info(f"Secret updated: {name}")
         except hvac.exceptions.InvalidPath as e:
             raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
+        except (ConnectionError, OSError) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:
             raise VaultError(f"Failed to update secret '{name}': {exc}") from exc
 
@@ -262,6 +274,10 @@ class VaultBackend(BaseSecretBackend):
             self.logger.info(f"Secret deleted: {name}")
         except hvac.exceptions.InvalidPath as e:
             raise VaultSecretNotFoundError(f"Secret path '{name}' does not exist: {e}") from e
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
+        except (ConnectionError, OSError) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:
             raise VaultError(f"Failed to delete secret '{name}': {exc}") from exc
 
@@ -274,6 +290,10 @@ class VaultBackend(BaseSecretBackend):
                 mount_point=self.mount_point,
             )
             return response["data"]["keys"]
+        except (hvac.exceptions.VaultDown, requests.ConnectionError, requests.Timeout) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
+        except (ConnectionError, OSError) as exc:
+            raise VaultConnectionError(f"Cannot reach Vault at {self.vault_addr}: {exc}") from exc
         except Exception as exc:
             raise VaultError(f"Failed to list secrets at '{path}': {exc}") from exc
 

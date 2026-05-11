@@ -1,5 +1,6 @@
 # src/credential_bridge/backends/env_file.py
 import os
+from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -55,12 +56,17 @@ class EnvFileBackend(BaseSecretBackend):
             tmp.unlink(missing_ok=True)
             raise EnvFileError(f"Failed to write {self.path}: {exc}") from exc
 
-    def _current_keys(self) -> Dict[str, str]:
-        return dict(dotenv_values(self.path)) if self.path.exists() else {}
+    def _parse_lines(self, lines: List[str]) -> Dict[str, str]:
+        """Parse dotenv key=value pairs from already-read lines (single file read)."""
+        return dict(dotenv_values(stream=StringIO("".join(lines))))
 
-    def _keys_for_group(self, group_name: str) -> List[str]:
+    def _current_keys(self) -> Dict[str, str]:
+        return self._parse_lines(self._read_lines()) if self.path.exists() else {}
+
+    def _keys_for_group(self, group_name: str, lines: Optional[List[str]] = None) -> List[str]:
         """Return env-var keys that appear under a '# group_name' comment block."""
-        lines = self._read_lines()
+        if lines is None:
+            lines = self._read_lines()
         in_group = False
         result = []
         for line in lines:
@@ -96,10 +102,11 @@ class EnvFileBackend(BaseSecretBackend):
             self._sync_environ({k: str(v) for k, v in secret.items()})
 
     def get_secret(self, name: str) -> Dict[str, Any]:
-        keys = self._current_keys()
+        lines = self._read_lines()
+        keys = self._parse_lines(lines)
         if name in keys:
             return {name: keys[name]}
-        group_keys = self._keys_for_group(name)
+        group_keys = self._keys_for_group(name, lines=lines)
         if group_keys:
             return {k: keys[k] for k in group_keys if k in keys}
         raise EnvFileNotFoundError(f"Key or group '{name}' not found in {self.path}.")
@@ -127,52 +134,70 @@ class EnvFileBackend(BaseSecretBackend):
             self._sync_environ(updated)
 
     def delete_secret(self, name: str) -> None:
-        existing = self._current_keys()
-        if name not in existing:
-            raise EnvFileNotFoundError(f"Key '{name}' not found in {self.path}.")
         lines = self._read_lines()
+        existing = self._parse_lines(lines)
 
-        # Find the index of the key line to remove
-        key_idx = next(
-            (i for i, line in enumerate(lines)
-             if "=" in line
-             and not line.strip().startswith("#")
-             and line.split("=", 1)[0].strip() == name),
-            None,
-        )
-
-        to_remove: set = set()
-        if key_idx is not None:
-            to_remove.add(key_idx)
-
-            # Walk backwards (skipping blank lines) to find a preceding group-header comment
-            comment_idx = None
-            for i in range(key_idx - 1, -1, -1):
-                s = lines[i].strip()
-                if not s:
-                    continue
-                if s.startswith("#"):
-                    comment_idx = i
-                break
-
-            if comment_idx is not None:
-                # Remove the comment header only if no other key=value lines follow it
-                # (scan forward until the next comment line or EOF, excluding the key being deleted)
-                has_sibling_keys = False
-                for i in range(comment_idx + 1, len(lines)):
+        # Case 1: name is a direct key
+        if name in existing:
+            key_idx = next(
+                (i for i, line in enumerate(lines)
+                 if "=" in line
+                 and not line.strip().startswith("#")
+                 and line.split("=", 1)[0].strip() == name),
+                None,
+            )
+            to_remove: set = set()
+            if key_idx is not None:
+                to_remove.add(key_idx)
+                # Walk backwards (skipping blank lines) to find a preceding group-header comment
+                comment_idx = None
+                for i in range(key_idx - 1, -1, -1):
                     s = lines[i].strip()
+                    if not s:
+                        continue
                     if s.startswith("#"):
-                        break
-                    if "=" in s and not s.startswith("#") and i != key_idx:
-                        has_sibling_keys = True
-                        break
-                if not has_sibling_keys:
-                    to_remove.add(comment_idx)
+                        comment_idx = i
+                    break
+                if comment_idx is not None:
+                    # Remove the comment header only if no other key=value lines follow it
+                    has_sibling_keys = False
+                    for i in range(comment_idx + 1, len(lines)):
+                        s = lines[i].strip()
+                        if s.startswith("#"):
+                            break
+                        if "=" in s and not s.startswith("#") and i != key_idx:
+                            has_sibling_keys = True
+                            break
+                    if not has_sibling_keys:
+                        to_remove.add(comment_idx)
+            new_lines = [line for i, line in enumerate(lines) if i not in to_remove]
+            self._write_lines(new_lines)
+            if self.load_into_environ:
+                os.environ.pop(name, None)
+            return
 
-        new_lines = [line for i, line in enumerate(lines) if i not in to_remove]
-        self._write_lines(new_lines)
-        if self.load_into_environ:
-            os.environ.pop(name, None)
+        # Case 2: name is a group label — delete the header comment and all its keys
+        group_keys = self._keys_for_group(name, lines=lines)
+        if group_keys:
+            to_remove = set()
+            for i, line in enumerate(lines):
+                if line.strip() == f"# {name}":
+                    to_remove.add(i)
+                    j = i + 1
+                    while j < len(lines):
+                        if lines[j].strip().startswith("#"):
+                            break
+                        to_remove.add(j)
+                        j += 1
+                    break
+            new_lines = [line for i, line in enumerate(lines) if i not in to_remove]
+            self._write_lines(new_lines)
+            if self.load_into_environ:
+                for k in group_keys:
+                    os.environ.pop(k, None)
+            return
+
+        raise EnvFileNotFoundError(f"Key or group '{name}' not found in {self.path}.")
 
     def list_secrets(self, path: str = "") -> List[str]:
         return list(self._current_keys().keys())

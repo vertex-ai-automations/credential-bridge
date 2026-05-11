@@ -197,6 +197,30 @@ def test_refresh_token_swallows_exception(mock_hvac):
 # 2d: persist parameter
 # ---------------------------------------------------------------------------
 
+def test_credentials_not_persisted_by_default(mocker):
+    """With persist=False (default), save_config should not be called."""
+    client = MagicMock()
+    client.is_authenticated.return_value = True
+    mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
+    mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
+    mock_save = mocker.patch("credential_bridge.backends.vault.save_config")
+
+    VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    mock_save.assert_not_called()
+
+
+def test_credentials_persisted_when_persist_true(mocker):
+    """With persist=True, save_config should be called once."""
+    client = MagicMock()
+    client.is_authenticated.return_value = True
+    mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
+    mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
+    mock_save = mocker.patch("credential_bridge.backends.vault.save_config")
+
+    VaultBackend(vault_url="https://vault.example.com", vault_token="s.test", persist=True)
+    mock_save.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # 2e: VaultSecretNotFoundError
 # ---------------------------------------------------------------------------
@@ -221,25 +245,69 @@ def test_delete_secret_raises_vault_secret_not_found(mock_hvac):
         backend.delete_secret("myapp/missing")
 
 
-def test_credentials_not_persisted_by_default(mocker):
-    """With persist=False (default), save_config should not be called."""
-    client = MagicMock()
-    client.is_authenticated.return_value = True
-    mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
-    mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
-    mock_save = mocker.patch("credential_bridge.backends.vault.save_config")
+# ---------------------------------------------------------------------------
+# 2f: connection errors surfaced from CRUD methods
+# ---------------------------------------------------------------------------
 
-    VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
-    mock_save.assert_not_called()
+def test_add_secret_raises_vault_connection_error_on_network_failure(mock_hvac):
+    import requests as _requests
+    from credential_bridge.exceptions import VaultConnectionError
+    mock_hvac.secrets.kv.v2.create_or_update_secret.side_effect = _requests.ConnectionError("unreachable")
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    with pytest.raises(VaultConnectionError):
+        backend.add_secret("myapp/db", {"k": "v"})
 
 
-def test_credentials_persisted_when_persist_true(mocker):
-    """With persist=True, save_config should be called once."""
-    client = MagicMock()
-    client.is_authenticated.return_value = True
-    mocker.patch("credential_bridge.backends.vault.hvac.Client", return_value=client)
-    mocker.patch("credential_bridge.backends.vault.load_config", return_value={})
-    mock_save = mocker.patch("credential_bridge.backends.vault.save_config")
+def test_get_secret_raises_vault_connection_error_on_timeout(mock_hvac):
+    import requests as _requests
+    from credential_bridge.exceptions import VaultConnectionError
+    mock_hvac.secrets.kv.v2.read_secret.side_effect = _requests.Timeout("timed out")
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    with pytest.raises(VaultConnectionError):
+        backend.get_secret("myapp/db")
 
-    VaultBackend(vault_url="https://vault.example.com", vault_token="s.test", persist=True)
-    mock_save.assert_called_once()
+
+# ---------------------------------------------------------------------------
+# 2g: version-management helpers
+# ---------------------------------------------------------------------------
+
+def test_read_secret_metadata(mock_hvac):
+    mock_hvac.secrets.kv.v2.read_secret_metadata.return_value = {"data": {"versions": {}}}
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    result = backend.read_secret_metadata("myapp/db")
+    mock_hvac.secrets.kv.v2.read_secret_metadata.assert_called_once_with(
+        path="myapp/db", mount_point=backend.mount_point
+    )
+    assert result == {"data": {"versions": {}}}
+
+
+def test_delete_secret_versions(mock_hvac):
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    backend.delete_secret_versions("myapp/db", [1, 2])
+    mock_hvac.secrets.kv.v2.delete_secret_versions.assert_called_once_with(
+        path="myapp/db", versions=[1, 2], mount_point=backend.mount_point
+    )
+
+
+def test_undelete_secret_versions(mock_hvac):
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    backend.undelete_secret_versions("myapp/db", [1])
+    mock_hvac.secrets.kv.v2.undelete_secret_versions.assert_called_once_with(
+        path="myapp/db", versions=[1], mount_point=backend.mount_point
+    )
+
+
+def test_destroy_secret_versions(mock_hvac):
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    backend.destroy_secret_versions("myapp/db", [1, 2, 3])
+    mock_hvac.secrets.kv.v2.destroy_secret_versions.assert_called_once_with(
+        path="myapp/db", versions=[1, 2, 3], mount_point=backend.mount_point
+    )
+
+
+def test_get_config(mock_hvac):
+    mock_hvac.secrets.kv.v2.read_configuration.return_value = {"data": {"max_versions": 10}}
+    backend = VaultBackend(vault_url="https://vault.example.com", vault_token="s.test")
+    result = backend.get_config()
+    mock_hvac.secrets.kv.v2.read_configuration.assert_called_once_with(mount_point=backend.mount_point)
+    assert result == {"data": {"max_versions": 10}}

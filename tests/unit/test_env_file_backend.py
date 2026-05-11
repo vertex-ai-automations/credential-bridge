@@ -153,3 +153,50 @@ def test_env_multi_key_group(tmp_path):
     assert backend.get_secret("DB_PORT") == {"DB_PORT": "5432"}
     assert "DB_HOST" in backend.list_secrets()
     assert "DB_PORT" in backend.list_secrets()
+
+
+def test_get_secret_by_group_name(tmp_path):
+    """get_secret with a group label returns all keys under that # comment block."""
+    backend = EnvFileBackend(path=tmp_path / ".env")
+    backend.add_secret("database", {"DB_HOST": "localhost", "DB_PORT": "5432"})
+    result = backend.get_secret("database")
+    assert result == {"DB_HOST": "localhost", "DB_PORT": "5432"}
+
+
+def test_delete_secret_by_group_name(tmp_path):
+    """delete_secret with a group label removes all keys and the comment header."""
+    backend = EnvFileBackend(path=tmp_path / ".env")
+    backend.add_secret("database", {"DB_HOST": "localhost", "DB_PORT": "5432"})
+    backend.delete_secret("database")
+    with pytest.raises(EnvFileNotFoundError):
+        backend.get_secret("DB_HOST")
+    with pytest.raises(EnvFileNotFoundError):
+        backend.get_secret("DB_PORT")
+    content = (tmp_path / ".env").read_text()
+    assert "# database" not in content
+    assert "DB_HOST" not in content
+
+
+def test_delete_secret_by_group_name_raises_if_group_missing(backend):
+    with pytest.raises(EnvFileNotFoundError):
+        backend.delete_secret("nonexistent_group")
+
+
+def test_load_into_environ_on_update(tmp_path, monkeypatch):
+    import os
+    env_file = tmp_path / ".env"
+    env_file.write_text("MY_VAR=hello\n", encoding="utf-8")
+    backend = EnvFileBackend(path=env_file, load_into_environ=True)
+    backend.update_secret("MY_VAR", {"MY_VAR": "world"})
+    assert os.environ.get("MY_VAR") == "world"
+    monkeypatch.delenv("MY_VAR", raising=False)
+
+
+def test_load_into_environ_on_delete(tmp_path, monkeypatch):
+    import os
+    env_file = tmp_path / ".env"
+    env_file.write_text("MY_VAR=hello\n", encoding="utf-8")
+    monkeypatch.setenv("MY_VAR", "hello")
+    backend = EnvFileBackend(path=env_file, load_into_environ=True)
+    backend.delete_secret("MY_VAR")
+    assert os.environ.get("MY_VAR") is None

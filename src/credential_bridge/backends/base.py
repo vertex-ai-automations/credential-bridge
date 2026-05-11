@@ -34,15 +34,29 @@ class BaseSecretBackend(ABC):
 
     @abstractmethod
     def add_secret(self, name: str, secret: Dict[str, Any]) -> None:
-        """Store a new secret. Creates a new version if the secret already exists (Vault); raises if key already exists (EnvFile)."""
+        """Store a new secret.
+
+        Behavior varies by backend:
+        - VaultBackend: creates a new KV-v2 version if the path already exists (idempotent/overwrite).
+        - KeyringBackend: raises KeyringError if the name already exists.
+        - EnvFileBackend: raises EnvFileKeyExistsError if any key already exists.
+
+        Do not assume idempotency when calling through SecretsManager.
+        """
 
     @abstractmethod
     def get_secret(self, name: str) -> Dict[str, Any]:
-        """Retrieve a secret by name. Raises if not found."""
+        """Retrieve a secret by name. Raises a backend-specific NotFound error if not found."""
 
     @abstractmethod
     def update_secret(self, name: str, secret: Dict[str, Any]) -> None:
-        """Update an existing secret. Raises if not found."""
+        """Update an existing secret. Raises a backend-specific NotFound error if not found.
+
+        Behavior varies by backend:
+        - VaultBackend: merges supplied keys into the existing secret (other keys are preserved).
+        - KeyringBackend: replaces the entire stored dict with the new value.
+        - EnvFileBackend: replaces each supplied key in-place; raises if any key is missing.
+        """
 
     @abstractmethod
     def delete_secret(self, name: str) -> None:

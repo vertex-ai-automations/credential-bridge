@@ -2,14 +2,6 @@
 import sys
 from typing import Optional
 
-# Ensure Rich can render Unicode (box lines, checkmarks) on Windows terminals
-if sys.platform == "win32":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
-    except AttributeError:
-        pass
-
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML
@@ -19,10 +11,11 @@ from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
-from rich.syntax import Syntax
-from rich.table import Table
 from rich.text import Text
 
+# Importing _output triggers the Windows UTF-8 reconfiguration and provides
+# shared Rich helpers so we don't duplicate them here.
+from .cli._output import print_result as _print_result_dict, print_table as _print_result_list
 from .utils import get_vault_credentials, load_config, load_welcome_banner, save_config
 
 # ── Rich console ──────────────────────────────────────────────────────────────
@@ -62,10 +55,6 @@ def _print_banner() -> None:
     except Exception:
         ascii_art = "Credential Bridge"
 
-    # Render banner on a wide console so the ASCII art never wraps
-    from rich.console import Console as _Console
-    wide = _Console(width=120)
-
     art = Text(ascii_art, style="bold #7c3aed", no_wrap=True, justify="center")
     tagline = Text(
         "\nUnified secrets management  ·  Vault  ·  Keyring  ·  .env",
@@ -74,39 +63,14 @@ def _print_banner() -> None:
     )
     combined = Text.assemble(art, tagline)
 
-    wide.print(
+    console.print(
         Panel(
             Align.center(combined),
             border_style="#3730a3",
             padding=(1, 4),
         )
     )
-    wide.print()
-
-
-def _print_result_dict(data: dict, title: str = "") -> None:
-    """Display a secret dict as a syntax-highlighted JSON panel."""
-    import json
-    syntax = Syntax(json.dumps(data, indent=2), "json", theme="monokai")
-    console.print(
-        Panel(
-            syntax,
-            title=f"[bold cyan]{title}[/bold cyan]" if title else "",
-            border_style="cyan",
-            padding=(0, 1),
-        )
-    )
-
-
-def _print_result_list(keys: list, title: str = "") -> None:
-    """Display a list of keys as a Rich table."""
-    min_width = len(title) + 4 if title else 20
-    table = Table(title=title, border_style="cyan", show_header=True,
-                  header_style="bold cyan", min_width=min_width)
-    table.add_column("Key", style="cyan")
-    for k in keys:
-        table.add_row(str(k))
-    console.print(table)
+    console.print()
 
 
 def _prompt(text: str, completer=None, is_password: bool = False) -> str:
@@ -135,9 +99,9 @@ def _menu_prompt(text: str, completer=None) -> str:
 def is_vault_cred_valid(vault_token=None, role_id=None, secret_id=None) -> bool:
     """Validate Vault credentials by attempting authentication through VaultBackend."""
     import os
-    vault_addr = os.environ.get("VAULT_ADDR", "")
+    vault_addr = os.environ.get("VAULT_ADDR") or load_config().get("vault_addr")
     if not vault_addr:
-        _error("VAULT_ADDR environment variable is not set.")
+        _error("No Vault address configured. Set VAULT_ADDR or save it via the wizard.")
         return False
     try:
         from .manager import SecretsManager

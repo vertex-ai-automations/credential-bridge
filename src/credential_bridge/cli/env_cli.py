@@ -1,4 +1,5 @@
 # src/credential_bridge/cli/env_cli.py
+import json
 from typing import List, Optional
 
 import typer
@@ -45,8 +46,7 @@ def get(
     try:
         result = backend.get_secret(name)
         if output == "json":
-            import json as _json
-            typer.echo(_json.dumps(result))
+            typer.echo(json.dumps(result))
         else:
             print_result(result, title=name)
     except CredentialBridgeError as e:
@@ -104,8 +104,7 @@ def list_secrets(
     try:
         keys = backend.list_secrets()
         if output == "json":
-            import json as _json
-            typer.echo(_json.dumps(keys))
+            typer.echo(json.dumps(keys))
         else:
             print_table(keys, title=f"Keys in {path}")
     except CredentialBridgeError as e:

@@ -7,7 +7,7 @@ import keyring
 from keyring.errors import KeyringError as _KeyringLibError
 from pylogshield import LogLevel, PyLogShield, get_logger
 
-from ..exceptions import ConfigurationError, KeyringError
+from ..exceptions import ConfigurationError, KeyringError, KeyringSecretNotFoundError
 from .base import BaseSecretBackend
 
 
@@ -51,7 +51,7 @@ class KeyringBackend(BaseSecretBackend):
         try:
             value = keyring.get_password(self.service_name, name)
             if value is None:
-                raise KeyringError(
+                raise KeyringSecretNotFoundError(
                     f"Secret '{name}' not found in keyring service '{self.service_name}'."
                 )
             try:
@@ -69,7 +69,7 @@ class KeyringBackend(BaseSecretBackend):
         try:
             existing = keyring.get_password(self.service_name, name)
             if existing is None:
-                raise KeyringError(
+                raise KeyringSecretNotFoundError(
                     f"Secret '{name}' does not exist — use add_secret() first."
                 )
             keyring.set_password(self.service_name, name, json.dumps(secret))
@@ -83,7 +83,7 @@ class KeyringBackend(BaseSecretBackend):
         try:
             existing = keyring.get_password(self.service_name, name)
             if existing is None:
-                raise KeyringError(
+                raise KeyringSecretNotFoundError(
                     f"Secret '{name}' not found in keyring service '{self.service_name}'."
                 )
             keyring.delete_password(self.service_name, name)

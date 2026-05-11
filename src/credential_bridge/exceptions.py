@@ -29,6 +29,10 @@ class KeyringError(BackendError):
     """System keyring error."""
 
 
+class KeyringSecretNotFoundError(KeyringError):
+    """A requested secret does not exist in the keyring."""
+
+
 class EnvFileError(BackendError):
     """Error reading or writing a .env file."""
 
